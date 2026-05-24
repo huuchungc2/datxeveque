@@ -14,6 +14,28 @@ export const api = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+api.interceptors.response.use(
+  (res) => {
+    const body = res.data;
+    if (body && typeof body === "object" && "success" in body) {
+      if (body.success === false) {
+        const err: any = new Error(body.message || "Có lỗi xảy ra");
+        err.response = res;
+        return Promise.reject(err);
+      }
+      if ("data" in body) res.data = body.data;
+    }
+    return res;
+  },
+  (err) => {
+    const msg = err.response?.data?.message;
+    if (msg && err.response?.data && typeof err.response.data === "object") {
+      err.response.data = { message: msg };
+    }
+    return Promise.reject(err);
+  }
+);
+
 export function unwrapList<T = any>(payload: any): T[] {
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload?.data)) return payload.data;

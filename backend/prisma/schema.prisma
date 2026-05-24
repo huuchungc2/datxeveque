@@ -243,6 +243,7 @@ model Trip {
   adminCommission     Decimal      @default(0) @map("admin_commission") @db.Decimal(12, 2)
   driverNetAmount     Decimal      @default(0) @map("driver_net_amount") @db.Decimal(12, 2)
   driverDebtAmount    Decimal      @default(0) @map("driver_debt_amount") @db.Decimal(12, 2)
+  adminOwesDriverAmount Decimal    @default(0) @map("admin_owes_driver_amount") @db.Decimal(12, 2)
   settlementStatus    SettlementStatus @default(PENDING) @map("settlement_status")
   note                String?      @db.Text
   createdAt           DateTime     @default(now()) @map("created_at")

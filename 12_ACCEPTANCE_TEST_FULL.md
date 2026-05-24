@@ -2,140 +2,144 @@
 
 Không được báo xong nếu chưa pass checklist này.
 
+**Auto-test API:** `cd backend && npm run test:acceptance` (32 case, cập nhật 2026-05-24)
+
+Legend: `[x]` = pass (API auto hoặc build) · `[ ]` = cần test tay UI
+
 # 1. Cài đặt/chạy
 
 ```txt
-[ ] backend npm install OK
-[ ] frontend npm install OK
-[ ] prisma generate OK
-[ ] restore SQL OK
-[ ] backend /api/health OK
-[ ] GET /api/routes có dữ liệu
-[ ] frontend localhost OK
+[x] backend npm install OK
+[x] frontend npm install OK
+[x] prisma generate OK
+[ ] restore SQL OK (mysql CLI — chạy restore-db.bat trên máy có MySQL)
+[x] backend /api/health OK
+[x] GET /api/routes có dữ liệu
+[x] frontend localhost OK (npm run build)
 ```
 
 # 2. Auth
 
 ```txt
-[ ] Login admin OK
-[ ] Login tài xế OK
-[ ] Login khách OK
-[ ] Login sai hiện lỗi tiếng Việt
-[ ] F5 /admin không bị đá login
+[x] Login admin OK
+[x] Login tài xế OK
+[x] Login khách OK
+[x] Login sai hiện lỗi tiếng Việt
+[ ] F5 /admin không bị đá login (API /auth/me OK)
 [ ] F5 /tai-xe không bị đá login
 [ ] User bị khóa gọi API bị 401
-[ ] Public reset password bị chặn
+[x] Public reset password bị chặn
 [ ] Admin reset password user OK
 ```
 
 # 3. Public booking
 
 ```txt
-[ ] Khách không login đặt xe được
-[ ] Tuyến load trong form
-[ ] Chọn tuyến thấy giá tạm tính
-[ ] Tạo booking trả mã đơn
-[ ] Booking lưu tên/SĐT khách
-[ ] Booking status new/waiting_dispatch
-[ ] Tra cứu đơn bằng mã + SĐT OK
+[x] Khách không login đặt xe được
+[ ] Tuyến load trong form (UI)
+[x] Chọn tuyến thấy giá tạm tính
+[x] Tạo booking trả mã đơn
+[x] Booking lưu tên/SĐT khách
+[x] Booking status new/waiting_dispatch
+[x] Tra cứu đơn bằng mã + SĐT OK
 ```
 
 # 4. Admin booking
 
 ```txt
-[ ] Admin thấy đơn mới
-[ ] Filter theo loại đơn OK
-[ ] Filter theo tuyến OK
-[ ] Filter theo ngày OK
-[ ] Filter theo SĐT OK
-[ ] Xem chi tiết đơn OK
-[ ] Sửa trạng thái OK
+[x] Admin thấy đơn mới
+[ ] Filter theo loại đơn OK (UI)
+[ ] Filter theo tuyến OK (UI)
+[ ] Filter theo ngày OK (UI)
+[ ] Filter theo SĐT OK (UI)
+[ ] Xem chi tiết đơn OK (UI)
+[ ] Sửa trạng thái OK (UI)
 ```
 
 # 5. Dispatch
 
 ```txt
-[ ] /admin/dispatch có 3 cột
-[ ] Cột đơn chưa gán có booking
-[ ] Cột chuyến đang gom có trip
-[ ] Cột tài xế rảnh có driver
-[ ] Chọn booking được
-[ ] Gán booking vào trip được
-[ ] Gán lại booking cũ không cộng trùng
+[x] /admin/dispatch có 3 cột (API)
+[x] Cột đơn chưa gán có booking
+[x] Cột chuyến đang gom có trip
+[x] Cột tài xế rảnh có driver
+[ ] Chọn booking được (UI)
+[x] Gán booking vào trip được
+[x] Gán lại booking cũ không cộng trùng
 [ ] Gán vượt ghế báo lỗi
-[ ] Tạo chuyến mới từ booking được
-[ ] Tạo chuyến với tài xế được
+[x] Tạo chuyến mới từ booking được
+[ ] Tạo chuyến với tài xế được (UI — API tạo trip+driver OK)
 ```
 
 # 6. Trip
 
 ```txt
-[ ] Tạo trip không trùng code
-[ ] Trip có route/driver/vehicle/departure
-[ ] Ghế booked/available đúng
-[ ] Doanh thu/hoa hồng/công nợ đúng
-[ ] Đổi trạng thái trip OK
+[x] Tạo trip không trùng code
+[x] Trip có route/driver/vehicle/departure
+[x] Ghế booked/available đúng (gán đơn)
+[x] Doanh thu/hoa hồng/công nợ đúng
+[ ] Đổi trạng thái trip OK (UI)
 ```
 
 # 7. Driver
 
 ```txt
-[ ] Tài xế login vào /tai-xe
-[ ] Thấy chuyến được giao
-[ ] Nhận chuyến OK
-[ ] Từ chối chuyến OK
-[ ] Cập nhật rảnh/bận OK
-[ ] Cập nhật vị trí OK
-[ ] Cập nhật ghế trống OK
-[ ] Xem công nợ của tôi OK
+[ ] Tài xế login vào /tai-xe (UI)
+[x] Thấy chuyến được giao
+[ ] Nhận chuyến OK (UI)
+[ ] Từ chối chuyến OK (UI)
+[ ] Cập nhật rảnh/bận OK (UI)
+[ ] Cập nhật vị trí OK (UI)
+[ ] Cập nhật ghế trống OK (UI)
+[x] Xem công nợ của tôi OK
 ```
 
 # 8. Finance
 
 ```txt
-[ ] Xe ghép tính giá đúng
-[ ] Bao xe tính giá đúng
-[ ] Gửi hàng tính giá đúng
-[ ] Không chọn tuyến không lấy nhầm giá tuyến
-[ ] Có tuyến ưu tiên giá tuyến
-[ ] Không có giá tuyến fallback global
-[ ] Khách trả tài xế tạo driver_owes_admin
-[ ] Khách trả admin tạo admin_owes_driver
-[ ] Admin xác nhận thanh toán công nợ OK
+[x] Xe ghép tính giá đúng
+[x] Bao xe tính giá đúng
+[x] Gửi hàng tính giá đúng
+[x] Không chọn tuyến không lấy nhầm giá tuyến
+[x] Có tuyến ưu tiên giá tuyến
+[x] Không có giá tuyến fallback global (CONTRACT global)
+[x] Khách trả tài xế tạo driver_owes_admin
+[x] Khách trả admin tạo admin_owes_driver
+[x] Admin xác nhận thanh toán công nợ OK
 ```
 
 # 9. Reports
 
 ```txt
-[ ] Báo cáo tổng quan có số
-[ ] Filter theo tài xế OK
-[ ] Filter theo tuyến OK
-[ ] Filter theo ngày OK
-[ ] Filter theo dịch vụ OK
-[ ] Báo cáo công nợ OK
+[x] Báo cáo tổng quan có số
+[ ] Filter theo tài xế OK (UI)
+[ ] Filter theo tuyến OK (UI)
+[ ] Filter theo ngày OK (UI)
+[x] Filter theo dịch vụ OK
+[x] Báo cáo công nợ OK
 ```
 
 # 10. Settings/media/content
 
 ```txt
-[ ] Admin sửa hotline/Zalo OK
-[ ] Header/footer dùng settings
-[ ] Upload ảnh WebP OK
-[ ] Alt text bắt buộc
-[ ] Tạo bài viết OK
+[x] Admin sửa hotline/Zalo OK (API settings)
+[ ] Header/footer dùng settings (UI — footer mobile còn hard-code)
+[ ] Upload ảnh WebP OK (UI)
+[x] Alt text bắt buộc (API)
+[ ] Tạo bài viết OK (UI)
 [ ] Render bài viết không chạy script
-[ ] Sitemap có tuyến/bài viết
-[ ] Robots OK
+[x] Sitemap có tuyến/bài viết
+[x] Robots OK
 ```
 
 # 11. Data restore
 
 ```txt
-[ ] Restore DB một lần có đủ user demo
-[ ] Có đủ tuyến
-[ ] Có đủ dịch vụ
-[ ] Có bảng giá mẫu
-[ ] Có booking mẫu
-[ ] Có trip mẫu
-[ ] Có driver mẫu
+[x] Restore DB một lần có đủ user demo (DB hiện tại)
+[x] Có đủ tuyến
+[x] Có đủ dịch vụ
+[x] Có bảng giá mẫu
+[x] Có booking mẫu
+[x] Có trip mẫu
+[x] Có driver mẫu
 ```

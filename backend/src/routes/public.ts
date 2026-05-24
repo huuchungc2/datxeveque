@@ -56,7 +56,13 @@ publicRouter.get("/services", async (_req, res) => {
 
 publicRouter.post("/price/estimate", async (req, res) => {
   try {
-    const result = await calculatePrice(req.body);
+    const result = await calculatePrice({
+      type: req.body.type || req.body.serviceType,
+      routeId: req.body.routeId,
+      passengerCount: req.body.passengerCount,
+      weightKg: req.body.weightKg,
+      vehicleType: req.body.vehicleType,
+    });
     res.json(result);
   } catch (error) {
     console.error("POST /price/estimate error:", error);
@@ -73,7 +79,13 @@ publicRouter.post("/bookings", async (req, res) => {
     if (!req.body.customerName?.trim()) return res.status(400).json({ message: "Vui lòng nhập họ tên" });
     if (!req.body.customerPhone?.trim()) return res.status(400).json({ message: "Vui lòng nhập số điện thoại/Zalo" });
 
-    const price = await calculatePrice({ type, routeId, passengerCount, vehicleType: req.body.vehicleType });
+    const price = await calculatePrice({
+      type,
+      routeId,
+      passengerCount,
+      weightKg: req.body.weightKg,
+      vehicleType: req.body.vehicleType,
+    });
 
     let customer = await prisma.customer.findFirst({ where: { phone: req.body.customerPhone.trim() } });
     if (!customer) {
@@ -100,7 +112,7 @@ publicRouter.post("/bookings", async (req, res) => {
         cargoDescription: req.body.cargoDescription || null,
         marketDescription: req.body.marketDescription || null,
         note: req.body.note || null,
-        status: BookingStatus.NEW,
+        status: BookingStatus.WAITING_DISPATCH,
         estimatedTotal: price.estimatedTotal || 0,
         finalTotal: price.estimatedTotal || 0,
         commissionAmount: price.commissionAmount || 0,

@@ -39,7 +39,11 @@ export default function BookingPage({ type = "SHARED_RIDE", title = "Đặt xe v
     dropoffAddress: "",
     scheduledAt: "",
     passengerCount: 1,
+    weightKg: 1,
     vehicleType: "",
+    paymentReceiver: "DRIVER",
+    cargoDescription: "",
+    marketDescription: "",
     note: "",
   });
 
@@ -72,12 +76,13 @@ export default function BookingPage({ type = "SHARED_RIDE", title = "Đặt xe v
           type: form.type,
           routeId: form.routeId ? Number(form.routeId) : null,
           passengerCount: Number(form.passengerCount || 1),
+          weightKg: Number(form.weightKg || 0),
           vehicleType: form.vehicleType || null,
         })
         .then((res) => setPrice(res.data))
         .catch(() => setPrice({ estimatedTotal: 0, note: "Chưa có bảng giá phù hợp" }));
     }
-  }, [form.type, form.routeId, form.passengerCount, form.vehicleType]);
+  }, [form.type, form.routeId, form.passengerCount, form.weightKg, form.vehicleType]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -178,7 +183,23 @@ export default function BookingPage({ type = "SHARED_RIDE", title = "Đặt xe v
           </div>
         </div>
 
-        {(form.type === "PRIVATE_RIDE" || form.type === "CONTRACT" || form.type === "WEDDING" || form.type === "TOUR") && (
+        {form.type === "CARGO" && (
+          <>
+            <label className="mt-4 block text-sm font-semibold">Cân nặng (kg)</label>
+            <input className="input mt-2" type="number" min="1" value={form.weightKg} onChange={(e) => setForm({ ...form, weightKg: e.target.value })} />
+            <label className="mt-4 block text-sm font-semibold">Mô tả hàng</label>
+            <textarea className="input mt-2" rows={2} value={form.cargoDescription} onChange={(e) => setForm({ ...form, cargoDescription: e.target.value })} />
+          </>
+        )}
+
+        {form.type === "MARKET" && (
+          <>
+            <label className="mt-4 block text-sm font-semibold">Danh sách đồ cần mua</label>
+            <textarea className="input mt-2" rows={3} value={form.marketDescription} onChange={(e) => setForm({ ...form, marketDescription: e.target.value })} />
+          </>
+        )}
+
+        {(form.type === "PRIVATE_RIDE" || form.type === "CONTRACT" || form.type === "WEDDING" || form.type === "TOUR" || form.type === "HOSPITAL" || form.type === "AIRPORT") && (
           <>
             <label className="mt-4 block text-sm font-semibold">Loại xe</label>
             <select className="input mt-2" value={form.vehicleType} onChange={(e) => setForm({ ...form, vehicleType: e.target.value })}>
@@ -190,6 +211,12 @@ export default function BookingPage({ type = "SHARED_RIDE", title = "Đặt xe v
             </select>
           </>
         )}
+
+        <label className="mt-4 block text-sm font-semibold">Khách trả tiền cho</label>
+        <select className="input mt-2" value={form.paymentReceiver} onChange={(e) => setForm({ ...form, paymentReceiver: e.target.value })}>
+          <option value="DRIVER">Tài xế (TX nộp hoa hồng admin)</option>
+          <option value="ADMIN">Admin (admin trả phần tài xế)</option>
+        </select>
 
         <label className="mt-4 block text-sm font-semibold">Ghi chú</label>
         <textarea className="input mt-2" rows={3} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />

@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 import './styles/global.css';
 import { AuthProvider } from './lib/auth';
@@ -13,10 +13,13 @@ import { LoginPage, RegisterPage, ForgotPasswordPage, ResetPasswordPage } from '
 import { PostsPage, PostDetailPage } from './pages/PostsPage';
 import { AdminBookings, AdminDashboard, AdminDrivers, AdminReports, AdminSettings, AdminTrips, AdminUsers } from './pages/AdminPages';
 import { AdminDispatch } from './pages/AdminDispatch';
+import { AdminDebts } from './pages/AdminFinance';
+import { AdminCatalogHub, AdminContentHub } from './pages/AdminHubPages';
 import TrackBookingPage from './pages/TrackBookingPage';
 import ContactPage from './pages/ContactPage';
 import { DriverAvailability, DriverDebts, DriverJobs } from './pages/DriverPages';
 import { CustomerHome } from './pages/CustomerPages';
+import { servicePages } from './routes/serviceRoutes';
 
 function App(){return <HelmetProvider><AuthProvider><BrowserRouter><Routes>
 <Route path="/" element={<PublicLayout><HomePage/></PublicLayout>} />
@@ -24,12 +27,16 @@ function App(){return <HelmetProvider><AuthProvider><BrowserRouter><Routes>
 <Route path="/gui-hang" element={<PublicLayout><BookingPage type="CARGO" title="Gửi hàng về quê"/></PublicLayout>} />
 <Route path="/di-cho-que" element={<PublicLayout><BookingPage type="MARKET" title="Đi chợ quê giùm"/></PublicLayout>} />
 <Route path="/thue-xe-hop-dong" element={<PublicLayout><BookingPage type="CONTRACT" title="Thuê xe hợp đồng"/></PublicLayout>} />
+{servicePages.map((s) => (
+  <Route key={s.path} path={s.path} element={<PublicLayout><BookingPage type={s.type} title={s.title}/></PublicLayout>} />
+))}
 <Route path="/dang-nhap" element={<PublicLayout><LoginPage/></PublicLayout>} />
 <Route path="/dang-ky" element={<PublicLayout><RegisterPage/></PublicLayout>} />
 <Route path="/quen-mat-khau" element={<PublicLayout><ForgotPasswordPage/></PublicLayout>} />
 <Route path="/dat-lai-mat-khau" element={<PublicLayout><ResetPasswordPage/></PublicLayout>} />
 <Route path="/tra-cuu-don" element={<PublicLayout><TrackBookingPage/></PublicLayout>} />
 <Route path="/lien-he" element={<PublicLayout><ContactPage/></PublicLayout>} />
+<Route path="/kinh-nghiem" element={<PublicLayout><PostsPage/></PublicLayout>} />
 <Route path="/kinh-nghiem/:slug" element={<PublicLayout><PostDetailPage/></PublicLayout>} />
 <Route path="/:slug" element={<PublicLayout><RoutePage/></PublicLayout>} />
 <Route path="/admin" element={<ProtectedRoute roles={["ADMIN","DISPATCHER","ACCOUNTANT"]}><DashboardLayout type="admin"><AdminDashboard/></DashboardLayout></ProtectedRoute>} />
@@ -39,6 +46,13 @@ function App(){return <HelmetProvider><AuthProvider><BrowserRouter><Routes>
 <Route path="/admin/tai-xe" element={<ProtectedRoute roles={["ADMIN","DISPATCHER","ACCOUNTANT"]}><DashboardLayout type="admin"><AdminDrivers/></DashboardLayout></ProtectedRoute>} />
 <Route path="/admin/users" element={<ProtectedRoute roles={["ADMIN"]}><DashboardLayout type="admin"><AdminUsers/></DashboardLayout></ProtectedRoute>} />
 <Route path="/admin/bao-cao" element={<ProtectedRoute roles={["ADMIN","ACCOUNTANT"]}><DashboardLayout type="admin"><AdminReports/></DashboardLayout></ProtectedRoute>} />
+<Route path="/admin/cong-no" element={<ProtectedRoute roles={["ADMIN","ACCOUNTANT"]}><DashboardLayout type="admin"><AdminDebts/></DashboardLayout></ProtectedRoute>} />
+<Route path="/admin/danh-muc" element={<ProtectedRoute roles={["ADMIN"]}><DashboardLayout type="admin"><AdminCatalogHub/></DashboardLayout></ProtectedRoute>} />
+<Route path="/admin/noi-dung" element={<ProtectedRoute roles={["ADMIN"]}><DashboardLayout type="admin"><AdminContentHub/></DashboardLayout></ProtectedRoute>} />
+<Route path="/admin/bai-viet" element={<Navigate to="/admin/noi-dung" replace />} />
+<Route path="/admin/media" element={<Navigate to="/admin/noi-dung" replace />} />
+<Route path="/admin/tuyen" element={<Navigate to="/admin/danh-muc" replace />} />
+<Route path="/admin/gia" element={<Navigate to="/admin/danh-muc" replace />} />
 <Route path="/admin/cai-dat" element={<ProtectedRoute roles={["ADMIN"]}><DashboardLayout type="admin"><AdminSettings/></DashboardLayout></ProtectedRoute>} />
 <Route path="/tai-xe" element={<ProtectedRoute roles={["DRIVER"]}><DashboardLayout type="driver"><DriverJobs/></DashboardLayout></ProtectedRoute>} />
 <Route path="/tai-xe/san-sang" element={<ProtectedRoute roles={["DRIVER"]}><DashboardLayout type="driver"><DriverAvailability/></DashboardLayout></ProtectedRoute>} />

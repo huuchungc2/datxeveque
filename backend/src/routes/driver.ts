@@ -84,8 +84,22 @@ driverRouter.post("/jobs/:id/reject", async (req, res) => {
 
 driverRouter.get("/reports", async (req, res) => {
   const driver = await prisma.driver.findFirst({ where: { userId: req.user!.id } });
-  if (!driver) return res.json({ totalTrips: 0, totalDebt: 0, trips: [] });
+  if (!driver) return res.json({ totalTrips: 0, totalDebt: 0, totalAdminOwes: 0, trips: [], payments: [] });
   const trips = await prisma.trip.findMany({ where: { driverId: driver.id }, include: { route: true }, orderBy: { departureAt: "desc" } });
-  const totalDebt = trips.reduce((s, t) => s + Number(t.driverDebtAmount), 0);
-  res.json({ totalTrips: trips.length, totalDebt, trips });
+  const payments = await prisma.driverSettlementPayment.findMany({ where: { driverId: driver.id }, orderBy: { createdAt: "desc" } });
+  let totalDebt = 0;
+  let totalAdminOwes = 0;
+  let totalPaid = 0;
+  const tripRows = trips.map((t) => {
+    const tripPays = payments.filter((p) => p.tripId === t.id);
+    const driverPaid = tripPays.filter((p) => p.direction === "DRIVER_OWES_ADMIN").reduce((s, p) => s + Number(p.amount), 0);
+    const adminPaid = tripPays.filter((p) => p.direction === "ADMIN_OWES_DRIVER").reduce((s, p) => s + Number(p.amount), 0);
+    const driverRem = Math.max(0, Number(t.driverDebtAmount) - driverPaid);
+    const adminRem = Math.max(0, Number((t as any).adminOwesDriverAmount || 0) - adminPaid);
+    totalDebt += driverRem;
+    totalAdminOwes += adminRem;
+    totalPaid += driverPaid;
+    return { ...t, driverPaidAdmin: driverPaid, adminPaidDriver: adminPaid, driverDebtRemaining: driverRem, adminOwesRemaining: adminRem };
+  });
+  res.json({ totalTrips: trips.length, totalDebt, totalAdminOwes, totalPaid, trips: tripRows, payments });
 });

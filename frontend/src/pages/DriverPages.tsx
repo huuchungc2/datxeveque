@@ -85,15 +85,16 @@ export function DriverDebts() {
   return (
     <div>
       <h1 className="text-3xl font-bold">Công nợ của tôi</h1>
-      <div className="mt-5 grid gap-4 md:grid-cols-2">
+      <div className="mt-5 grid gap-4 md:grid-cols-3">
         <div className="card"><p>Tổng chuyến</p><b className="text-2xl">{r?.totalTrips}</b></div>
         <div className="card"><p>Còn phải nộp admin</p><b className="text-2xl text-red-600">{formatMoney(r?.totalDebt)}</b></div>
+        <div className="card"><p>Admin còn trả tôi</p><b className="text-2xl text-cta">{formatMoney(r?.totalAdminOwes)}</b></div>
       </div>
       <div className="mt-5 grid gap-3">
         {r?.trips?.map((t: any) => (
           <div className="card" key={t.id}>
             <b>{t.code} - {t.route?.name}</b>
-            <p className="text-sm text-slate-600">Hoa hồng/công nợ: {formatMoney(t.driverDebtAmount)} • {t.settlementStatus}</p>
+            <p className="text-sm text-slate-600">Còn nợ admin: {formatMoney(t.driverDebtRemaining)} • Admin trả: {formatMoney(t.adminOwesRemaining)} • {t.settlementStatus}</p>
           </div>
         ))}
       </div>

@@ -4,11 +4,16 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import sharp from "sharp";
 import slugify from "slugify";
-import { BookingStatus, TripStatus } from "@prisma/client";
+import { BookingStatus, SettlementStatus, TripStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requireRoles } from "../middleware/auth.js";
 import { hashPassword } from "../lib/auth.js";
 import { generateCode } from "../lib/codes.js";
+import { sumBookingRollups } from "../lib/settlement.js";
+
+function sanitizePostContent(html: string) {
+  return String(html || "").replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
+}
 
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireRoles(["ADMIN", "DISPATCHER", "ACCOUNTANT"]));
@@ -221,23 +226,22 @@ adminRouter.post("/trips/:id/add-bookings", async (req, res) => {
 
       await tx.booking.updateMany({ where: { id: { in: newBookingIds } }, data: { status: BookingStatus.ASSIGNED } });
 
-      const total = bookings.reduce((s, b) => s + Number(b.finalTotal || 0), 0);
-      const commission = bookings.reduce((s, b) => s + Number(b.commissionAmount || 0), 0);
-      const driverNet = total - commission;
+      const fin = sumBookingRollups(bookings);
 
       const updatedTrip = await tx.trip.update({
         where: { id: tripId },
         data: {
           bookedSeats: { increment: seats },
           availableSeats: { decrement: seats },
-          totalCustomerAmount: { increment: total },
-          adminCommission: { increment: commission },
-          driverNetAmount: { increment: driverNet },
-          driverDebtAmount: { increment: commission },
+          totalCustomerAmount: { increment: fin.total },
+          adminCommission: { increment: fin.commission },
+          driverNetAmount: { increment: fin.driverAmount },
+          driverDebtAmount: { increment: fin.driverOwesAdmin },
+          adminOwesDriverAmount: { increment: fin.adminOwesDriver },
         },
       });
 
-      return { added: newBookingIds.length, skipped: bookingIds.length - newBookingIds.length, seats, total, commission, trip: updatedTrip };
+      return { added: newBookingIds.length, skipped: bookingIds.length - newBookingIds.length, seats, ...fin, trip: updatedTrip };
     });
 
     res.json({ ok: true, ...result });
@@ -251,10 +255,170 @@ adminRouter.get("/reports/overview", async (req, res) => {
   const where: any = {};
   if (req.query.driverId) where.driverId = Number(req.query.driverId);
   if (req.query.routeId) where.routeId = Number(req.query.routeId);
-  if (req.query.from || req.query.to) where.departureAt = { gte: req.query.from ? new Date(String(req.query.from)) : undefined, lte: req.query.to ? new Date(String(req.query.to)) : undefined };
-  const trips = await prisma.trip.findMany({ where, include: { route: true, driver: true } });
-  const sum = (field: keyof typeof trips[number]) => trips.reduce((s, t: any) => s + Number(t[field] || 0), 0);
-  res.json({ totalTrips: trips.length, totalRevenue: sum("totalCustomerAmount" as any), totalCommission: sum("adminCommission" as any), totalDriverNet: sum("driverNetAmount" as any), totalDriverDebt: sum("driverDebtAmount" as any), trips });
+  if (req.query.serviceType) {
+    where.tripBookings = { some: { booking: { type: String(req.query.serviceType) } } };
+  }
+  if (req.query.from || req.query.to) {
+    where.departureAt = {
+      gte: req.query.from ? new Date(String(req.query.from)) : undefined,
+      lte: req.query.to ? new Date(String(req.query.to)) : undefined,
+    };
+  }
+  const trips = await prisma.trip.findMany({
+    where,
+    include: { route: true, driver: true, tripBookings: { include: { booking: true } } },
+    orderBy: { departureAt: "desc" },
+  });
+  const sum = (field: string) => trips.reduce((s, t: any) => s + Number(t[field] || 0), 0);
+  res.json({
+    totalTrips: trips.length,
+    totalRevenue: sum("totalCustomerAmount"),
+    totalCommission: sum("adminCommission"),
+    totalDriverNet: sum("driverNetAmount"),
+    totalDriverDebt: sum("driverDebtAmount"),
+    totalAdminOwesDriver: sum("adminOwesDriverAmount"),
+    trips,
+  });
+});
+
+adminRouter.get("/reports/debts", async (req, res) => {
+  const where: any = {};
+  if (req.query.driverId) where.driverId = Number(req.query.driverId);
+  if (req.query.settlementStatus) where.settlementStatus = req.query.settlementStatus;
+  const trips = await prisma.trip.findMany({
+    where,
+    include: { route: true, driver: true },
+    orderBy: { departureAt: "desc" },
+    take: 200,
+  });
+  const tripIds = trips.map((t) => t.id);
+  const driverIds = [...new Set(trips.map((t) => t.driverId).filter(Boolean))] as number[];
+  const payments = await prisma.driverSettlementPayment.findMany({
+    where: { OR: [{ tripId: { in: tripIds } }, { driverId: { in: driverIds } }] },
+    orderBy: { createdAt: "desc" },
+  });
+  const paidByTrip = new Map<number, { driverPaid: number; adminPaid: number }>();
+  for (const p of payments) {
+    if (!p.tripId) continue;
+    const cur = paidByTrip.get(p.tripId) || { driverPaid: 0, adminPaid: 0 };
+    const amt = Number(p.amount);
+    if (p.direction === "DRIVER_OWES_ADMIN") cur.driverPaid += amt;
+    if (p.direction === "ADMIN_OWES_DRIVER") cur.adminPaid += amt;
+    paidByTrip.set(p.tripId, cur);
+  }
+  const rows = trips.map((t) => {
+    const paid = paidByTrip.get(t.id) || { driverPaid: 0, adminPaid: 0 };
+    const driverDebt = Number(t.driverDebtAmount);
+    const adminOwes = Number((t as any).adminOwesDriverAmount || 0);
+    return {
+      ...t,
+      driverPaidAdmin: paid.driverPaid,
+      adminPaidDriver: paid.adminPaid,
+      driverDebtRemaining: Math.max(0, driverDebt - paid.driverPaid),
+      adminOwesRemaining: Math.max(0, adminOwes - paid.adminPaid),
+    };
+  });
+  res.json({
+    totalDriverDebt: rows.reduce((s, r) => s + r.driverDebtRemaining, 0),
+    totalAdminOwesDriver: rows.reduce((s, r) => s + r.adminOwesRemaining, 0),
+    trips: rows,
+    payments,
+  });
+});
+
+adminRouter.get("/settlements", async (req, res) => {
+  const where: any = {};
+  if (req.query.driverId) where.driverId = Number(req.query.driverId);
+  if (req.query.tripId) where.tripId = Number(req.query.tripId);
+  const items = await prisma.driverSettlementPayment.findMany({ where, orderBy: { createdAt: "desc" }, take: 200 });
+  res.json(items);
+});
+
+adminRouter.post("/settlements", async (req, res) => {
+  try {
+    const { tripId, driverId, amount, direction, method, note } = req.body;
+    if (!driverId || !amount || !direction) return res.status(400).json({ message: "Thiếu tài xế, số tiền hoặc chiều thanh toán" });
+    const payment = await prisma.driverSettlementPayment.create({
+      data: {
+        tripId: tripId ? Number(tripId) : null,
+        driverId: Number(driverId),
+        amount: Number(amount),
+        direction: String(direction),
+        method: method || "Tiền mặt",
+        note: note || null,
+      },
+    });
+    if (tripId) {
+      const trip = await prisma.trip.findUnique({ where: { id: Number(tripId) } });
+      if (trip) {
+        const pays = await prisma.driverSettlementPayment.findMany({ where: { tripId: Number(tripId) } });
+        let driverPaid = 0;
+        let adminPaid = 0;
+        for (const p of pays) {
+          const a = Number(p.amount);
+          if (p.direction === "DRIVER_OWES_ADMIN") driverPaid += a;
+          if (p.direction === "ADMIN_OWES_DRIVER") adminPaid += a;
+        }
+        const driverRem = Math.max(0, Number(trip.driverDebtAmount) - driverPaid);
+        const adminRem = Math.max(0, Number((trip as any).adminOwesDriverAmount || 0) - adminPaid);
+        let settlementStatus: SettlementStatus = SettlementStatus.PARTIAL;
+        if (driverRem <= 0 && adminRem <= 0) settlementStatus = SettlementStatus.PAID;
+        await prisma.trip.update({ where: { id: trip.id }, data: { settlementStatus } });
+      }
+    }
+    res.json({ message: "Đã ghi nhận thanh toán", payment });
+  } catch (error) {
+    console.error("POST /admin/settlements error:", error);
+    res.status(500).json({ message: "Không ghi nhận được thanh toán" });
+  }
+});
+
+adminRouter.patch("/trips/:id/settlement", async (req, res) => {
+  const trip = await prisma.trip.update({
+    where: { id: Number(req.params.id) },
+    data: { settlementStatus: req.body.settlementStatus, note: req.body.note },
+  });
+  res.json(trip);
+});
+
+adminRouter.get("/posts", async (_req, res) => {
+  const posts = await prisma.post.findMany({ include: { category: true }, orderBy: { updatedAt: "desc" } });
+  res.json(posts);
+});
+
+adminRouter.post("/posts", async (req, res) => {
+  const data = req.body;
+  const post = await prisma.post.create({
+    data: {
+      title: data.title,
+      slug: data.slug,
+      excerpt: data.excerpt,
+      content: sanitizePostContent(data.content),
+      categoryId: data.categoryId ? Number(data.categoryId) : null,
+      status: data.status || "DRAFT",
+      publishedAt: data.status === "PUBLISHED" ? new Date() : null,
+      seoTitle: data.seoTitle,
+      seoDescription: data.seoDescription,
+    },
+  });
+  res.json(post);
+});
+
+adminRouter.patch("/posts/:id", async (req, res) => {
+  const data: any = { ...req.body };
+  if (data.content) data.content = sanitizePostContent(data.content);
+  if (data.categoryId) data.categoryId = Number(data.categoryId);
+  if (data.status === "PUBLISHED" && !data.publishedAt) data.publishedAt = new Date();
+  const post = await prisma.post.update({ where: { id: Number(req.params.id) }, data });
+  res.json(post);
+});
+
+adminRouter.get("/media", async (_req, res) => {
+  res.json(await prisma.mediaFile.findMany({ orderBy: { createdAt: "desc" }, take: 200 }));
+});
+
+adminRouter.get("/post-categories", async (_req, res) => {
+  res.json(await prisma.postCategory.findMany({ orderBy: { id: "asc" } }));
 });
 
 adminRouter.get("/settings", async (_req, res) => res.json(await prisma.siteSetting.findMany({ orderBy: { key: "asc" } })));
@@ -266,7 +430,8 @@ adminRouter.put("/settings", async (req, res) => {
 adminRouter.post("/media/upload", upload.single("file"), async (req, res) => {
   if (!req.file) return res.status(400).json({ message: "Chưa chọn file" });
   const title = req.body.title || req.file.originalname;
-  const altText = req.body.altText || title;
+  const altText = (req.body.altText || "").trim();
+  if (!altText) return res.status(400).json({ message: "Bắt buộc nhập alt text cho ảnh SEO" });
   const usageType = req.body.usageType || "general";
   const slug = slugify(req.body.keyword || title, { lower: true, strict: true, locale: "vi" });
   const dir = path.resolve(process.cwd(), process.env.UPLOAD_DIR || "../uploads", usageType);

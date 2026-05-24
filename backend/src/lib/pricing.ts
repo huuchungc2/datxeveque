@@ -50,11 +50,18 @@ export async function calculatePrice(input: PriceInput) {
   let total = Number(rule.basePrice || 0);
 
   if (rule.pricingType === "PER_PERSON") total = Number(rule.pricePerPerson || 0) * passengerCount;
-  if (rule.pricingType === "PER_KG") total = Number(rule.basePrice || 0) + Number(rule.pricePerKg || 0) * Number(input.weightKg || 0);
+  else if (rule.pricingType === "PER_KG") total = Number(rule.basePrice || 0) + Number(rule.pricePerKg || 0) * Number(input.weightKg || 0);
+  else if (rule.pricingType === "PER_TRIP") total = Number(rule.basePrice || 0);
 
   let commission = 0;
   if (rule.commissionType === "PERCENT") commission = Math.round((total * Number(rule.commissionValue || 0)) / 100);
   else commission = Number(rule.commissionValue || 0) * (rule.pricingType === "PER_PERSON" ? passengerCount : 1);
 
-  return { estimatedTotal: total, commissionAmount: commission, note: "Giá tạm tính, nhân viên sẽ xác nhận lại." };
+  const driverAmount = Math.max(0, total - commission);
+  return {
+    estimatedTotal: total,
+    commissionAmount: commission,
+    driverAmount,
+    note: "Giá tạm tính, nhân viên sẽ xác nhận lại.",
+  };
 }
