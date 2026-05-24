@@ -1,0 +1,91 @@
+import { Router } from "express";
+import { BookingStatus, TripStatus } from "@prisma/client";
+import { prisma } from "../lib/prisma.js";
+import { requireAuth, requireRoles } from "../middleware/auth.js";
+
+export const driverRouter = Router();
+driverRouter.use(requireAuth, requireRoles(["DRIVER"]));
+
+driverRouter.get("/me", async (req, res) => {
+  const driver = await prisma.driver.findFirst({ where: { userId: req.user!.id }, include: { vehicles: true } });
+  res.json(driver);
+});
+
+driverRouter.patch("/availability", async (req, res) => {
+  const driver = await prisma.driver.findFirst({ where: { userId: req.user!.id } });
+  if (!driver) return res.status(404).json({ message: "Không tìm thấy tài xế" });
+  const updated = await prisma.driver.update({ where: { id: driver.id }, data: { status: req.body.status, location: req.body.location, direction: req.body.direction, seatsFree: Number(req.body.seatsFree || 0) } });
+  res.json(updated);
+});
+
+driverRouter.get("/jobs", async (req, res) => {
+  const driver = await prisma.driver.findFirst({ where: { userId: req.user!.id } });
+  if (!driver) return res.json([]);
+  const trips = await prisma.trip.findMany({ where: { driverId: driver.id }, include: { route: true, tripBookings: { include: { booking: true } } }, orderBy: { departureAt: "desc" } });
+  res.json(trips);
+});
+
+driverRouter.patch("/jobs/:id/status", async (req, res) => {
+  const driver = await prisma.driver.findFirst({ where: { userId: req.user!.id } });
+  const trip = await prisma.trip.findFirst({ where: { id: Number(req.params.id), driverId: driver?.id } });
+  if (!trip) return res.status(404).json({ message: "Không tìm thấy chuyến" });
+  const updated = await prisma.trip.update({ where: { id: trip.id }, data: { status: req.body.status } });
+  res.json(updated);
+});
+
+driverRouter.post("/jobs/:id/accept", async (req, res) => {
+  try {
+    const driver = await prisma.driver.findFirst({ where: { userId: req.user!.id } });
+    if (!driver) return res.status(404).json({ message: "Không tìm thấy tài xế" });
+    const tripId = Number(req.params.id);
+    const trip = await prisma.trip.findFirst({ where: { id: tripId, driverId: driver.id } });
+    if (!trip) return res.status(404).json({ message: "Không tìm thấy chuyến" });
+
+    const result = await prisma.$transaction(async (tx) => {
+      const updatedTrip = await tx.trip.update({ where: { id: tripId }, data: { status: TripStatus.READY } });
+      const links = await tx.tripBooking.findMany({ where: { tripId }, select: { bookingId: true } });
+      if (links.length) {
+        await tx.booking.updateMany({ where: { id: { in: links.map((l) => l.bookingId) } }, data: { status: BookingStatus.DRIVER_ACCEPTED } });
+      }
+      return updatedTrip;
+    });
+    res.json({ message: "Đã nhận chuyến", trip: result });
+  } catch (error) {
+    console.error("POST /driver/jobs/:id/accept error:", error);
+    res.status(500).json({ message: "Không nhận được chuyến" });
+  }
+});
+
+driverRouter.post("/jobs/:id/reject", async (req, res) => {
+  try {
+    const driver = await prisma.driver.findFirst({ where: { userId: req.user!.id } });
+    if (!driver) return res.status(404).json({ message: "Không tìm thấy tài xế" });
+    const tripId = Number(req.params.id);
+    const trip = await prisma.trip.findFirst({ where: { id: tripId, driverId: driver.id } });
+    if (!trip) return res.status(404).json({ message: "Không tìm thấy chuyến" });
+
+    const result = await prisma.$transaction(async (tx) => {
+      const updatedTrip = await tx.trip.update({
+        where: { id: tripId },
+        data: { driverId: null, vehicleId: null, status: TripStatus.COLLECTING },
+      });
+      const links = await tx.tripBooking.findMany({ where: { tripId }, select: { bookingId: true } });
+      if (links.length) {
+        await tx.booking.updateMany({ where: { id: { in: links.map((l) => l.bookingId) } }, data: { status: BookingStatus.ASSIGNED } });
+      }
+      return updatedTrip;
+    });
+    res.json({ message: "Đã từ chối chuyến", trip: result });
+  } catch (error) {
+    console.error("POST /driver/jobs/:id/reject error:", error);
+    res.status(500).json({ message: "Không từ chối được chuyến" });
+  }
+});
+
+driverRouter.get("/reports", async (req, res) => {
+  const driver = await prisma.driver.findFirst({ where: { userId: req.user!.id } });
+  if (!driver) return res.json({ totalTrips: 0, totalDebt: 0, trips: [] });
+  const trips = await prisma.trip.findMany({ where: { driverId: driver.id }, include: { route: true }, orderBy: { departureAt: "desc" } });
+  const totalDebt = trips.reduce((s, t) => s + Number(t.driverDebtAmount), 0);
+  res.json({ totalTrips: trips.length, totalDebt, trips });
+});

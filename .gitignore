@@ -1,0 +1,32 @@
+.DS_Store
+Thumbs.db
+
+# env / secrets
+.env
+**/.env
+
+# deps
+**/node_modules/
+
+# builds
+**/dist/
+**/build/
+**/.vite/
+**/.turbo/
+**/.next/
+**/*.tsbuildinfo
+
+# logs
+**/*.log
+
+# prisma
+**/prisma/migrations/
+
+# uploads / runtime
+uploads/
+**/uploads/
+
+# IDE
+.vscode/
+.idea/
+

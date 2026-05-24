@@ -1,0 +1,34 @@
+---
+description: DXVQ stack, spec workflow, definition of done
+alwaysApply: true
+---
+
+# Đặt Xe Về Quê — project rules
+
+## Stack (không đổi)
+
+React + Vite + TS + Tailwind | Express + TS + Prisma + MySQL | JWT HttpOnly cookie + bcrypt | upload sharp → `/uploads` | UI tiếng Việt, brand xanh + CTA cam.
+
+## Trước khi code feature
+
+1. Đọc spec liên quan: `01`–`13_*.md` ở root (dispatch → `04_DISPATCH_FLOW_SPEC.md`).
+2. Prisma schema là nguồn chuẩn DB; SQL restore phải khớp schema.
+3. Rà tiến độ: `PROGRESS.md` và tick `12_ACCEPTANCE_TEST_FULL.md` sau khi test.
+
+## Cấm
+
+- Demo placeholder, UI mock không gọi API.
+- Hard-code tuyến/giá/hotline/tài xế trong UI (load từ API/settings).
+- `count + 1` cho mã booking/trip; `availableSeats` âm; gán booking trùng vẫn cộng tiền/ghế.
+- Public reset password (phải 403).
+
+## Bắt buộc
+
+- Khách vãng lai đặt xe không login.
+- `/admin/dispatch`: 3 cột (đơn chưa gán | chuyến gom | tài xế rảnh), gán qua `POST /api/admin/trips/:id/add-bookings`.
+- Auth middleware query DB, user `LOCKED` → 401.
+- Báo xong: ghi rõ mục chưa pass trong acceptance nếu chưa test hết.
+
+## Chạy local
+
+`restore-db.bat` → `start-local.bat` | API :4002 | Web :5173 | Demo: `README.md`

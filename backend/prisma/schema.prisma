@@ -1,0 +1,334 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  DISPATCHER
+  ACCOUNTANT
+  DRIVER
+  CUSTOMER
+}
+
+enum UserStatus {
+  ACTIVE
+  LOCKED
+}
+
+enum BookingType {
+  SHARED_RIDE
+  PRIVATE_RIDE
+  CARGO
+  MARKET
+  CONTRACT
+  WEDDING
+  TOUR
+  HOSPITAL
+  AIRPORT
+}
+
+enum BookingStatus {
+  NEW
+  CONTACTED
+  QUOTED
+  WAITING_DEPOSIT
+  DEPOSITED
+  WAITING_DISPATCH
+  ASSIGNED
+  DRIVER_ACCEPTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum TripStatus {
+  COLLECTING
+  READY
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum SettlementStatus {
+  PENDING
+  PARTIAL
+  PAID
+  RECONCILED
+  WAIVED
+  DISPUTED
+}
+
+model User {
+  id           Int        @id @default(autoincrement())
+  name         String
+  phone        String     @unique
+  email        String?    @unique
+  passwordHash String     @map("password_hash")
+  role         UserRole
+  status       UserStatus @default(ACTIVE)
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  customer     Customer?
+  driver       Driver?
+
+  @@map("users")
+}
+
+model Customer {
+  id        Int      @id @default(autoincrement())
+  userId    Int?     @unique @map("user_id")
+  name      String
+  phone     String
+  zaloPhone String?  @map("zalo_phone")
+  note      String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  user      User?    @relation(fields: [userId], references: [id])
+  bookings  Booking[]
+
+  @@map("customers")
+}
+
+model Driver {
+  id          Int      @id @default(autoincrement())
+  userId      Int?     @unique @map("user_id")
+  name        String
+  phone       String
+  zaloPhone   String?  @map("zalo_phone")
+  status      String   @default("Rảnh")
+  location    String?  @map("current_location")
+  direction   String?  @map("direction_preference")
+  seatsFree   Int      @default(0) @map("seats_free")
+  note        String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  user        User?    @relation(fields: [userId], references: [id])
+  vehicles    Vehicle[]
+  trips       Trip[]
+
+  @@map("drivers")
+}
+
+model Vehicle {
+  id           Int      @id @default(autoincrement())
+  driverId     Int      @map("driver_id")
+  vehicleType  String   @map("vehicle_type")
+  seats        Int
+  licensePlate String?  @map("license_plate")
+  status       String   @default("Đang hoạt động")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  driver       Driver   @relation(fields: [driverId], references: [id])
+  trips        Trip[]
+
+  @@map("vehicles")
+}
+
+model Location {
+  id        Int      @id @default(autoincrement())
+  name      String
+  slug      String   @unique
+  type      String
+  parentId  Int?     @map("parent_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("locations")
+}
+
+model Route {
+  id                   Int      @id @default(autoincrement())
+  name                 String
+  slug                 String   @unique
+  fromName             String   @map("from_name")
+  toName               String   @map("to_name")
+  direction            String
+  distanceKm           Decimal? @map("distance_km") @db.Decimal(8, 2)
+  estimatedDurationMin Int?     @map("estimated_duration_min")
+  seoTitle             String?  @map("seo_title")
+  seoDescription       String?  @map("seo_description") @db.Text
+  content              String?  @db.LongText
+  status               String   @default("Đang chạy")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+  bookings             Booking[]
+  priceRules           PriceRule[]
+  trips                Trip[]
+
+  @@map("routes")
+}
+
+model Service {
+  id          Int      @id @default(autoincrement())
+  name        String
+  slug        String   @unique
+  type        BookingType @unique
+  description String?  @db.Text
+  status      String   @default("Đang bật")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("services")
+}
+
+model PriceRule {
+  id             Int         @id @default(autoincrement())
+  serviceType    BookingType @map("service_type")
+  routeId        Int?        @map("route_id")
+  vehicleType    String?     @map("vehicle_type")
+  pricingType    String      @map("pricing_type")
+  basePrice      Decimal     @default(0) @map("base_price") @db.Decimal(12, 2)
+  pricePerPerson Decimal     @default(0) @map("price_per_person") @db.Decimal(12, 2)
+  pricePerKg     Decimal     @default(0) @map("price_per_kg") @db.Decimal(12, 2)
+  commissionType String      @default("FIXED") @map("commission_type")
+  commissionValue Decimal   @default(0) @map("commission_value") @db.Decimal(12, 2)
+  active          Boolean   @default(true)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  route           Route?   @relation(fields: [routeId], references: [id])
+
+  @@map("price_rules")
+}
+
+model Booking {
+  id                  Int           @id @default(autoincrement())
+  code                String        @unique
+  customerId          Int?          @map("customer_id")
+  customerName        String        @map("customer_name")
+  customerPhone       String        @map("customer_phone")
+  type                BookingType
+  routeId             Int?          @map("route_id")
+  direction           String?
+  pickupAddress       String?       @map("pickup_address")
+  dropoffAddress      String?       @map("dropoff_address")
+  scheduledAt         DateTime?     @map("scheduled_at")
+  passengerCount      Int           @default(1) @map("passenger_count")
+  vehicleType         String?       @map("vehicle_type")
+  cargoDescription    String?       @map("cargo_description") @db.Text
+  marketDescription   String?       @map("market_description") @db.Text
+  note                String?       @db.Text
+  status              BookingStatus @default(NEW)
+  estimatedTotal      Decimal       @default(0) @map("estimated_total") @db.Decimal(12, 2)
+  finalTotal          Decimal       @default(0) @map("final_total") @db.Decimal(12, 2)
+  commissionAmount    Decimal       @default(0) @map("commission_amount") @db.Decimal(12, 2)
+  paymentReceiver     String        @default("DRIVER") @map("payment_receiver")
+  source              String        @default("WEBSITE")
+  createdAt           DateTime      @default(now()) @map("created_at")
+  updatedAt           DateTime      @updatedAt @map("updated_at")
+  customer            Customer?     @relation(fields: [customerId], references: [id])
+  route               Route?        @relation(fields: [routeId], references: [id])
+  tripBookings        TripBooking[]
+
+  @@map("bookings")
+}
+
+model Trip {
+  id                  Int          @id @default(autoincrement())
+  code                String       @unique
+  routeId             Int          @map("route_id")
+  driverId            Int?         @map("driver_id")
+  vehicleId           Int?         @map("vehicle_id")
+  departureAt         DateTime     @map("departure_at")
+  totalSeats          Int          @default(0) @map("total_seats")
+  bookedSeats         Int          @default(0) @map("booked_seats")
+  availableSeats      Int          @default(0) @map("available_seats")
+  status              TripStatus   @default(COLLECTING)
+  totalCustomerAmount Decimal      @default(0) @map("total_customer_amount") @db.Decimal(12, 2)
+  adminCommission     Decimal      @default(0) @map("admin_commission") @db.Decimal(12, 2)
+  driverNetAmount     Decimal      @default(0) @map("driver_net_amount") @db.Decimal(12, 2)
+  driverDebtAmount    Decimal      @default(0) @map("driver_debt_amount") @db.Decimal(12, 2)
+  settlementStatus    SettlementStatus @default(PENDING) @map("settlement_status")
+  note                String?      @db.Text
+  createdAt           DateTime     @default(now()) @map("created_at")
+  updatedAt           DateTime     @updatedAt @map("updated_at")
+  route               Route        @relation(fields: [routeId], references: [id])
+  driver              Driver?      @relation(fields: [driverId], references: [id])
+  vehicle             Vehicle?     @relation(fields: [vehicleId], references: [id])
+  tripBookings        TripBooking[]
+
+  @@map("trips")
+}
+
+model TripBooking {
+  id        Int      @id @default(autoincrement())
+  tripId    Int      @map("trip_id")
+  bookingId Int      @map("booking_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  trip      Trip     @relation(fields: [tripId], references: [id])
+  booking   Booking  @relation(fields: [bookingId], references: [id])
+
+  @@unique([tripId, bookingId])
+  @@map("trip_bookings")
+}
+
+model DriverSettlementPayment {
+  id        Int      @id @default(autoincrement())
+  tripId    Int?     @map("trip_id")
+  driverId  Int      @map("driver_id")
+  amount    Decimal  @db.Decimal(12, 2)
+  direction String
+  method    String
+  note      String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("driver_settlement_payments")
+}
+
+model SiteSetting {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  value     String?  @db.Text
+  groupName String   @default("general") @map("group_name")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("site_settings")
+}
+
+model MediaFile {
+  id           Int      @id @default(autoincrement())
+  originalName String   @map("original_name")
+  fileName     String   @map("file_name")
+  fileUrl      String   @map("file_url")
+  mimeType     String   @map("mime_type")
+  sizeBytes    Int      @map("size_bytes")
+  altText      String   @map("alt_text")
+  title        String?
+  usageType    String   @map("usage_type")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("media_files")
+}
+
+model PostCategory {
+  id    Int    @id @default(autoincrement())
+  name  String
+  slug  String @unique
+  posts Post[]
+
+  @@map("post_categories")
+}
+
+model Post {
+  id             Int      @id @default(autoincrement())
+  title          String
+  slug           String   @unique
+  excerpt        String?  @db.Text
+  content        String   @db.LongText
+  categoryId     Int?     @map("category_id")
+  status         String   @default("DRAFT")
+  publishedAt    DateTime? @map("published_at")
+  seoTitle       String?  @map("seo_title")
+  seoDescription String?  @map("seo_description") @db.Text
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  category       PostCategory? @relation(fields: [categoryId], references: [id])
+
+  @@map("posts")
+}

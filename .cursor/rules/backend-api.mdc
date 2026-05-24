@@ -1,0 +1,15 @@
+---
+description: Backend Express, Prisma, API conventions
+globs: backend/**/*
+alwaysApply: false
+---
+
+# Backend
+
+- Routes: `backend/src/routes/` — mount `/api/auth`, `/api`, `/api/admin`, `/api/driver`, `/api/customer`.
+- Mã đơn/chuyến: `lib/codes.ts` (`generateCode`), retry on P2002.
+- Gán booking: transaction trong `add-bookings` — skip duplicate `trip_bookings`, check `availableSeats`, rollup tiền/hoa hồng.
+- Dispatch data: `GET /api/admin/dispatch`.
+- Pricing: `lib/pricing.ts` — có `routeId` ưu tiên giá tuyến, không routeId chỉ global.
+- Upload: `POST /api/admin/media/upload` — sharp WebP, bắt `altText`.
+- Ưu tiên format spec `03_API_CONTRACT_FULL.md` (`{ success, data, message }`) khi thêm/sửa endpoint.
