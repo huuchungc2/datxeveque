@@ -15,6 +15,7 @@ import { NotificationBell } from "./NotificationBell";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { getContactInfo, useSiteSettings } from "../lib/useSiteSettings";
+import { ContactQuickBlock } from "./ContactQuickBlock";
 import { cargoNavServices, passengerNavServices } from "../routes/bookableServices";
 
 const publicLinks = [
@@ -209,7 +210,7 @@ function PublicMobileNav({
 
 export function PublicLayout({ children }: { children: React.ReactNode }) {
   const { user, reload } = useAuth();
-  const { settings } = useSiteSettings();
+  const { settings, loading: settingsLoading } = useSiteSettings();
   const contact = getContactInfo(settings);
   const navigate = useNavigate();
   const location = useLocation();
@@ -293,22 +294,38 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
           </div>
           <div>
             <b>Liên hệ</b>
-            <p className="mt-2 text-sm text-slate-600">{contact.footerLine}</p>
+            {settingsLoading ? (
+              <p className="mt-2 text-sm text-slate-500">Đang tải…</p>
+            ) : contact.ready ? (
+              <p className="mt-2 text-sm text-slate-600">{contact.footerLine}</p>
+            ) : (
+              <p className="mt-2 text-sm text-amber-700">Cấu hình trong admin</p>
+            )}
           </div>
           <div>
             <b>Tuyến chính</b>
-            <p className="mt-2 text-sm text-slate-600">{settings.service_area || "Sài Gòn ⇄ Đức Linh / Tánh Linh"}</p>
+            <p className="mt-2 text-sm text-slate-600">
+              {settings.service_area?.trim() || "—"}
+            </p>
           </div>
         </div>
       </footer>
 
       <div className="fixed bottom-0 left-0 right-0 z-50 grid grid-cols-3 gap-2 border-t border-slate-200 bg-white p-2 md:hidden">
-        <a className="btn-secondary py-3" href={`tel:${contact.hotline}`}>
-          <Phone size={18} /> Gọi
-        </a>
-        <a className="btn-secondary py-3" href={contact.zaloUrl} target="_blank" rel="noreferrer">
-          <MessageCircle size={18} /> Zalo
-        </a>
+        {contact.ready ? (
+          <>
+            <a className="btn-secondary py-3" href={`tel:${contact.hotline}`}>
+              <Phone size={18} /> Gọi
+            </a>
+            <a className="btn-secondary py-3" href={contact.zaloUrl} target="_blank" rel="noreferrer">
+              <MessageCircle size={18} /> Zalo
+            </a>
+          </>
+        ) : (
+          <a className="btn-secondary col-span-2 py-3" href="/lien-he">
+            <Phone size={18} /> Liên hệ
+          </a>
+        )}
         <Link className="btn-primary py-3" to="/dat-xe">
           Đặt xe
         </Link>

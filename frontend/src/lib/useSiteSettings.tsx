@@ -3,22 +3,34 @@ import { api } from "./api";
 
 export type SiteSettings = Record<string, string>;
 
+/** Chỉ fallback tên thương hiệu — SĐT/Zalo lấy từ DB, không hard-code số hiển thị. */
 export const SITE_SETTINGS_DEFAULTS: SiteSettings = {
   brand_name: "Đặt Xe Về Quê",
-  hotline_primary: "0900000000",
-  zalo_phone: "0900000000",
-  zalo_url: "https://zalo.me/0900000000",
-  service_area: "Sài Gòn ⇄ Đức Linh, Tánh Linh",
+  hotline_primary: "",
+  zalo_phone: "",
+  zalo_url: "",
+  service_area: "",
 };
 
+function phoneFromZaloUrl(url: string) {
+  const m = String(url || "").match(/zalo\.me\/(0?\d{9,10})/i);
+  if (!m) return "";
+  const digits = m[1];
+  return digits.startsWith("0") ? digits : `0${digits}`;
+}
+
 export function getContactInfo(settings: SiteSettings) {
-  const hotline = settings.hotline_primary || SITE_SETTINGS_DEFAULTS.hotline_primary!;
-  const zaloUrl = settings.zalo_url || `https://zalo.me/${hotline}`;
-  const zaloPhone = settings.zalo_phone || hotline;
-  const footerLine = settings.zalo_url
-    ? `Hotline: ${hotline} · Zalo: ${zaloPhone}`
-    : `Hotline/Zalo: ${hotline}`;
-  return { hotline, zaloPhone, zaloUrl, footerLine };
+  const hotline = (settings.hotline_primary || "").trim();
+  const zaloUrlRaw = (settings.zalo_url || "").trim();
+  const zaloUrl = zaloUrlRaw || (hotline ? `https://zalo.me/${hotline}` : "");
+  const zaloPhone = (settings.zalo_phone || "").trim() || phoneFromZaloUrl(zaloUrl) || hotline;
+  const ready = Boolean(hotline);
+  const footerLine = ready
+    ? zaloPhone && zaloPhone !== hotline
+      ? `Hotline: ${hotline} · Zalo: ${zaloPhone}`
+      : `Hotline/Zalo: ${hotline}`
+    : "";
+  return { hotline, zaloPhone, zaloUrl, footerLine, ready };
 }
 
 type Ctx = {
