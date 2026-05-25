@@ -4,17 +4,21 @@ import type { Response } from "express";
 
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
 
+export function isPasswordHashBcrypt(stored: string) {
+  return /^\$2[aby]\$/.test(String(stored || ""));
+}
+
 export async function hashPassword(password: string) {
   return bcrypt.hash(String(password || ""), 10);
 }
 
+/** Dump/restore SQL có thể lưu admin123 dạng chữ — vẫn so khớp; lúc login sẽ tự bcrypt (xem upgradePasswordIfLegacy). */
 export async function verifyPassword(password: string, storedPassword: string) {
   const input = String(password || "");
   const stored = String(storedPassword || "");
   if (!input || !stored) return false;
 
-  const isBcryptHash = stored.startsWith("$2a$") || stored.startsWith("$2b$") || stored.startsWith("$2y$");
-  if (isBcryptHash) {
+  if (isPasswordHashBcrypt(stored)) {
     try {
       return await bcrypt.compare(input, stored);
     } catch {
@@ -22,10 +26,17 @@ export async function verifyPassword(password: string, storedPassword: string) {
     }
   }
 
-  // Chỉ cho phép plain text ở local/test để SQL restore demo vẫn đăng nhập được.
-  // Production bắt buộc phải dùng bcrypt hash.
-  if (process.env.NODE_ENV !== "production") return input === stored;
-  return false;
+  return input === stored;
+}
+
+/** Lần đăng nhập đầu sau import dump: chuyển mật khẩu plain → bcrypt, không cần script tay trên VPS. */
+export async function upgradePasswordIfLegacy(userId: number, password: string, storedHash: string) {
+  if (isPasswordHashBcrypt(storedHash)) return;
+  const { prisma } = await import("./prisma.js");
+  await prisma.user.update({
+    where: { id: userId },
+    data: { passwordHash: await hashPassword(password) },
+  });
 }
 
 export function signToken(payload: object) {

@@ -71,6 +71,8 @@ mysql -u dxvq -p dat_xe_ve_que < database/dat_xe_ve_que_react_express_full_resto
 
 Hoặc trên Windows dev: chạy `restore-db.bat` rồi export/import dump lên VPS.
 
+Sau import dump, đăng nhập `0900000000` / `admin123` như local — **lần đầu vào** hệ thống tự chuyển mật khẩu sang bcrypt trong DB (không cần chạy script tay).
+
 ---
 
 ## 4. Backend `.env`
@@ -188,7 +190,21 @@ Tài khoản demo (đổi mật khẩu sau khi lên production):
 
 ---
 
-## 8. Cập nhật phiên bản mới
+## 8. Login localhost OK, VPS báo «sai mật khẩu»?
+
+| Nguyên nhân | Cách xử lý |
+|-------------|------------|
+| **Code cũ trên VPS** (chặn plain ở production) | `git pull`, `npm run build` backend, `pm2 restart` — bản mới tự bcrypt khi login. |
+| **Sai SĐT** | 10 số, bắt đầu `0` (vd. `0900000000`). |
+| **User LOCKED / DB VPS trống** | Import lại dump; `SELECT phone, status FROM users`. |
+| **API không tới backend** | F12 → `POST /api/auth/login` phải **200**; kiểm tra Nginx `/api/` và `VITE_API_URL=same-origin`. |
+| **200 nhưng vào admin bị đá ra** | Cookie HTTPS: `FRONTEND_URL` đúng domain, Nginx `X-Forwarded-Proto`. |
+
+Tuỳ chọn (hash hàng loạt không cần login từng user): `node backend/scripts/hash-plain-passwords.mjs`.
+
+---
+
+## 9. Cập nhật phiên bản mới
 
 ```bash
 cd /var/www/dat-xe-ve-que
@@ -209,10 +225,11 @@ cd backend && npm run db:migrate
 
 ---
 
-## 9. Lỗi thường gặp
+## 10. Lỗi thường gặp
 
 | Triệu chứng | Nguyên nhân | Cách xử lý |
 |-------------|-------------|------------|
+| Login VPS «sai mật khẩu», local OK | Backend cũ hoặc DB chưa import | Deploy code mới + import dump; hoặc `hash-plain-passwords.mjs` |
 | «Không tải được danh sách tuyến» trên mobile | Build còn `VITE_API_URL=http://localhost:4002` | Build lại với `same-origin` hoặc `https://tenmien.vn` |
 | 502 Bad Gateway `/api` | PM2/API chưa chạy | `pm2 logs`, `curl 127.0.0.1:4002/api/health` |
 | Đăng nhập không giữ session | `FRONTEND_URL` sai hoặc HTTP/HTTPS lẫn | Khớp domain thật, dùng HTTPS |
@@ -221,6 +238,6 @@ cd backend && npm run db:migrate
 
 ---
 
-## 10. Không dùng Nginx (chỉ IP:port) — không khuyến nghị
+## 11. Không dùng Nginx (chỉ IP:port) — không khuyến nghị
 
 Có thể mở `4002` và `5173` ra internet nhưng phải set `VITE_API_URL=http://IP:4002` khi build, cấu hình CORS, cookie — dễ lỗi trên mobile. **Nên dùng domain + Nginx như trên.**

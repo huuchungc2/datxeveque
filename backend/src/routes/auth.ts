@@ -1,7 +1,13 @@
 import { Router } from "express";
 import { UserRole } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
-import { hashPassword, setAuthCookie, signToken, verifyPassword } from "../lib/auth.js";
+import {
+  hashPassword,
+  setAuthCookie,
+  signToken,
+  upgradePasswordIfLegacy,
+  verifyPassword,
+} from "../lib/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 import { assertVnPhone, PHONE_INVALID_MESSAGE } from "../lib/phone.js";
 
@@ -19,6 +25,7 @@ authRouter.post("/login", async (req, res) => {
   if (!user || String(user.status).toUpperCase() !== "ACTIVE") return res.status(401).json({ message: "Số điện thoại hoặc mật khẩu không đúng" });
   const ok = await verifyPassword(String(password || ""), user.passwordHash);
   if (!ok) return res.status(401).json({ message: "Số điện thoại hoặc mật khẩu không đúng" });
+  await upgradePasswordIfLegacy(user.id, String(password || ""), user.passwordHash);
   const payload = { id: user.id, role: user.role, phone: user.phone, name: user.name };
   setAuthCookie(res, signToken(payload));
   res.json({ user: payload });
