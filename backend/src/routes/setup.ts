@@ -31,15 +31,25 @@ setupRouter.get("/status", async (_req, res) => {
  * Khôi phục admin khi login VPS vẫn báo sai (chỉ khi SETUP_SECRET trong .env khớp).
  * curl -X POST https://domain/api/setup/reset-admin -H "Content-Type: application/json" -d "{\"secret\":\"...\"}"
  */
+function isLocalRequest(req: { ip?: string; socket?: { remoteAddress?: string } }) {
+  const ip = req.ip || req.socket?.remoteAddress || "";
+  return ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1" || ip.endsWith("127.0.0.1");
+}
+
 setupRouter.post("/reset-admin", async (req, res) => {
   const expected = process.env.SETUP_SECRET?.trim();
-  if (!expected) {
-    return res.status(403).json({
-      message: "Chưa cấu hình SETUP_SECRET trong backend/.env — thêm SETUP_SECRET=chuoi-bi-mat-roi restart PM2",
-    });
-  }
-  if (String(req.body?.secret || "") !== expected) {
-    return res.status(403).json({ message: "Sai SETUP_SECRET" });
+  const fromLocal = isLocalRequest(req);
+  if (!fromLocal) {
+    if (!expected) {
+      return res.status(403).json({
+        message: "Thêm SETUP_SECRET trong backend/.env hoặc gọi từ VPS: curl 127.0.0.1:4002/api/setup/reset-admin",
+      });
+    }
+    if (String(req.body?.secret || "") !== expected) {
+      return res.status(403).json({ message: "Sai SETUP_SECRET" });
+    }
+  } else {
+    console.warn("[setup] reset-admin từ localhost");
   }
 
   const passwordHash = await hashPassword("admin123");

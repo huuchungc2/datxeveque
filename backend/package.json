@@ -9,6 +9,7 @@
     "start": "node dist/server.js",
     "test:acceptance": "node scripts/acceptance-test.mjs",
     "db:migrate": "node scripts/migrate.mjs",
+    "fix:login": "node scripts/fix-vps-login.mjs",
     "db:seed-test": "node scripts/seed-test-data.mjs",
     "db:fix-encoding": "node scripts/fix-encoding.mjs",
     "db:seed-pricing": "node scripts/seed-pricing-test.mjs",
