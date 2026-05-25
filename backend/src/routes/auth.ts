@@ -8,24 +8,27 @@ import {
   upgradePasswordIfLegacy,
   verifyPassword,
 } from "../lib/auth.js";
+import { findUserByPhone } from "../lib/bootstrapAuth.js";
 import { requireAuth } from "../middleware/auth.js";
 import { assertVnPhone, PHONE_INVALID_MESSAGE } from "../lib/phone.js";
 
 export const authRouter = Router();
 
 authRouter.post("/login", async (req, res) => {
-  const { password } = req.body;
+  const password = String(req.body.password || "").trim();
   let cleanPhone: string;
   try {
     cleanPhone = assertVnPhone(req.body.phone);
   } catch (e: any) {
     return res.status(e.statusCode || 400).json({ message: e.message || PHONE_INVALID_MESSAGE });
   }
-  const user = await prisma.user.findUnique({ where: { phone: cleanPhone } });
-  if (!user || String(user.status).toUpperCase() !== "ACTIVE") return res.status(401).json({ message: "Số điện thoại hoặc mật khẩu không đúng" });
-  const ok = await verifyPassword(String(password || ""), user.passwordHash);
+  const user = await findUserByPhone(cleanPhone);
+  if (!user || String(user.status).toUpperCase() !== "ACTIVE") {
+    return res.status(401).json({ message: "Số điện thoại hoặc mật khẩu không đúng" });
+  }
+  const ok = await verifyPassword(password, user.passwordHash);
   if (!ok) return res.status(401).json({ message: "Số điện thoại hoặc mật khẩu không đúng" });
-  await upgradePasswordIfLegacy(user.id, String(password || ""), user.passwordHash);
+  await upgradePasswordIfLegacy(user.id, password, user.passwordHash);
   const payload = { id: user.id, role: user.role, phone: user.phone, name: user.name };
   setAuthCookie(res, signToken(payload));
   res.json({ user: payload });

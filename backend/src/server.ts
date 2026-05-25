@@ -10,6 +10,7 @@ import { driverRouter } from "./routes/driver.js";
 import { customerRouter } from "./routes/customer.js";
 import { notificationsRouter } from "./routes/notifications.js";
 import { prisma } from "./lib/prisma.js";
+import { bootstrapAuthOnStartup } from "./lib/bootstrapAuth.js";
 import { apiResponseMiddleware } from "./middleware/apiResponse.js";
 
 const app = express();
@@ -25,6 +26,22 @@ const corsOrigins = (process.env.FRONTEND_URL || "http://localhost:5173")
 function corsOriginAllowed(origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
   if (!origin) return callback(null, true);
   if (corsOrigins.includes(origin)) return callback(null, true);
+  // Production: cho phép www và không-www cùng gốc (tránh login OK local, lỗi VPS vì thiếu FRONTEND_URL)
+  if (process.env.NODE_ENV === "production" && corsOrigins.length) {
+    try {
+      const reqHost = new URL(origin).host.replace(/^www\./, "");
+      const allowed = corsOrigins.some((o) => {
+        try {
+          return new URL(o).host.replace(/^www\./, "") === reqHost;
+        } catch {
+          return false;
+        }
+      });
+      if (allowed) return callback(null, true);
+    } catch {
+      /* ignore */
+    }
+  }
   if (process.env.NODE_ENV !== "production") {
     if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) return callback(null, true);
     if (/^https?:\/\/192\.168\.\d{1,3}\.\d{1,3}(:\d+)?$/i.test(origin)) return callback(null, true);
@@ -42,7 +59,17 @@ app.use("/uploads", express.static(uploadRoot));
 
 app.get("/", (_req, res) => res.json({ ok: true, app: "dat-xe-ve-que-api", message: "Backend API đang chạy. Website mở ở http://localhost:5173" }));
 app.get("/health", (_req, res) => res.json({ ok: true, app: "dat-xe-ve-que-api" }));
-app.get("/api/health", (_req, res) => res.json({ success: true, data: { ok: true, app: "dat-xe-ve-que-api" } }));
+app.get("/api/health", async (_req, res) => {
+  try {
+    const adminCount = await prisma.user.count({ where: { phone: "0900000000", status: "ACTIVE" } });
+    res.json({
+      success: true,
+      data: { ok: true, app: "dat-xe-ve-que-api", adminReady: adminCount > 0 },
+    });
+  } catch {
+    res.status(503).json({ success: false, message: "Không kết nối được database" });
+  }
+});
 app.use("/api", apiResponseMiddleware);
 app.use("/api/auth", authRouter);
 app.use("/api", publicRouter);
@@ -65,4 +92,5 @@ app.get("/sitemap.xml", async (_req, res) => {
 
 app.listen(port, host, () => {
   console.log(`Đặt Xe Về Quê API đang chạy tại http://localhost:${port} (LAN: port ${port}, host ${host})`);
+  void bootstrapAuthOnStartup();
 });

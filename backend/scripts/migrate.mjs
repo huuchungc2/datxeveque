@@ -1,8 +1,29 @@
 /** Migration DB — node scripts/migrate.mjs */
 import "dotenv/config";
+import bcrypt from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
+
+function isBcrypt(hash) {
+  return /^\$2[aby]\$/.test(String(hash || ""));
+}
+
+async function hashLegacyPasswords() {
+  const users = await prisma.user.findMany({ select: { id: true, phone: true, passwordHash: true } });
+  let n = 0;
+  for (const u of users) {
+    const plain = String(u.passwordHash || "");
+    if (!plain || isBcrypt(plain)) continue;
+    await prisma.user.update({
+      where: { id: u.id },
+      data: { passwordHash: await bcrypt.hash(plain, 10) },
+    });
+    console.log(`OK: bcrypt ${u.phone}`);
+    n++;
+  }
+  if (n) console.log(`Đã mã hóa ${n} mật khẩu demo`);
+}
 
 const steps = [
   {
@@ -66,6 +87,7 @@ async function main() {
       else throw e;
     }
   }
+  await hashLegacyPasswords();
 }
 
 main()
