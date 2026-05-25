@@ -69,9 +69,43 @@ cd /var/www/dat-xe-ve-que
 mysql -u dxvq -p dat_xe_ve_que < database/dat_xe_ve_que_react_express_full_restore.sql
 ```
 
-Hoặc trên Windows dev: chạy `restore-db.bat` rồi export/import dump lên VPS.
+Hoặc import dump từ máy local (mật khẩu dạng chữ `admin123` trong SQL):
 
-Sau import dump, đăng nhập `0900000000` / `admin123` như local — **lần đầu vào** hệ thống tự chuyển mật khẩu sang bcrypt trong DB (không cần chạy script tay).
+```bash
+mysql -u dxvq -p dat_xe_ve_que < database/dump-dat_xe_ve_que-202605251220.sql
+```
+
+### Sau import — bắt buộc bcrypt admin (production)
+
+Dump/restore từ local lưu `password_hash` **plain text**. Trên VPS (`NODE_ENV=production`) phải gọi **`/api/setup/reset-admin`** một lần — backend tự `bcrypt` mật khẩu admin. **Không** cần `hash-plain-passwords.mjs`.
+
+1. Thêm vào `backend/.env` (mục 4 bên dưới):
+
+   ```env
+   SETUP_SECRET=chuoi-bi-mat-rieng-cua-ban
+   ```
+
+2. Khởi động API (PM2), rồi:
+
+   ```bash
+   curl -s -X POST https://tenmien.vn/api/setup/reset-admin \
+     -H "Content-Type: application/json" \
+     -d '{"secret":"chuoi-bi-mat-rieng-cua-ban"}'
+   ```
+
+   Hoặc trên chính VPS (localhost, không cần secret trong body):
+
+   ```bash
+   curl -s -X POST http://127.0.0.1:4002/api/setup/reset-admin \
+     -H "Content-Type: application/json" \
+     -d '{}'
+   ```
+
+3. Kiểm tra: `curl -s https://tenmien.vn/api/setup/status` → `"bcrypt":true`.
+
+4. Đăng nhập: `0900000000` / `admin123`.
+
+Script `fix-vps-login.mjs` / `hash-plain-passwords.mjs` chỉ dùng khi khẩn cấp, không phải quy trình chuẩn.
 
 ---
 
@@ -95,6 +129,7 @@ FRONTEND_URL=https://tenmien.vn
 PUBLIC_SITE_URL=https://tenmien.vn
 UPLOAD_DIR="../uploads"
 COOKIE_SAMESITE=lax
+SETUP_SECRET="chuoi-bi-mat-rieng-cua-ban"
 ```
 
 Sau khi có HTTPS, bật cookie secure (nếu code hỗ trợ env — hoặc để middleware đọc `NODE_ENV=production`).
@@ -190,64 +225,23 @@ Tài khoản demo (đổi mật khẩu sau khi lên production):
 
 ---
 
-## 8. Login VPS vẫn «sai mật khẩu» — xử lý nhanh
+## 8. Login VPS vẫn «sai mật khẩu»?
 
-**Bước 1 — Kiểm tra DB có admin:**
-
-```bash
-curl -s https://tenmien.vn/api/setup/status
-```
-
-Cần `"admin":{"exists":true,"status":"ACTIVE","bcrypt":true}`. Nếu `exists:false` → import lại `database/dump-dat_xe_ve_que-202605251220.sql`.
-
-**Bước 2 — PM2 phải đọc `.env` (DATABASE_URL, JWT_SECRET):**
-
-Trong `backend/.env` thêm:
-
-```env
-SETUP_SECRET=chuoi-bi-mat-cua-ban
-```
+| Triệu chứng | Cách xử lý |
+|-------------|------------|
+| Vừa import dump từ local | `SETUP_SECRET` trong `.env` → `POST /api/setup/reset-admin` (mục 3) — **không** dùng `hash-plain-passwords.mjs` |
+| `/api/setup/status` → `bcrypt:false` | Chưa gọi `reset-admin` — gọi lại bước trên |
+| `exists:false` | Import lại SQL; kiểm tra `DATABASE_URL` trong `.env` |
+| `curl login` 127.0.0.1 OK, web lỗi | Build frontend `VITE_API_URL=same-origin` |
+| PM2 không đọc `.env` | `pm2 delete …` rồi `pm2 start deploy/ecosystem.config.cjs` |
 
 ```bash
-cd /var/www/dat-xe-ve-que
-git pull
-cd backend && npm run build
-pm2 delete dat-xe-ve-que-api
-pm2 start /var/www/dat-xe-ve-que/deploy/ecosystem.config.cjs
-pm2 save
-```
-
-**Bước 3 — Reset admin (chắc chắn 0900000000 / admin123):**
-
-```bash
-curl -s -X POST https://tenmien.vn/api/setup/reset-admin \
-  -H "Content-Type: application/json" \
-  -d '{"secret":"chuoi-bi-mat-cua-ban"}'
-```
-
-**Bước 4 — Test login trên server:**
-
-```bash
+curl -s http://127.0.0.1:4002/api/setup/status
+curl -s -X POST http://127.0.0.1:4002/api/setup/reset-admin -H "Content-Type: application/json" -d '{}'
 curl -s -X POST http://127.0.0.1:4002/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"phone":"0900000000","password":"admin123"}'
 ```
-
-Phải có `"user"`. Nếu OK mà web vẫn lỗi → build lại frontend (`VITE_API_URL=same-origin`).
-
----
-
-## 8b. Login localhost OK, VPS báo «sai mật khẩu»? (chi tiết)
-
-| Nguyên nhân | Cách xử lý |
-|-------------|------------|
-| **Code cũ trên VPS** (chặn plain ở production) | `git pull`, `npm run build` backend, `pm2 restart` — bản mới tự bcrypt khi login. |
-| **Sai SĐT** | 10 số, bắt đầu `0` (vd. `0900000000`). |
-| **User LOCKED / DB VPS trống** | Import lại dump; `SELECT phone, status FROM users`. |
-| **API không tới backend** | F12 → `POST /api/auth/login` phải **200**; kiểm tra Nginx `/api/` và `VITE_API_URL=same-origin`. |
-| **200 nhưng vào admin bị đá ra** | Cookie HTTPS: `FRONTEND_URL` đúng domain, Nginx `X-Forwarded-Proto`. |
-
-Tuỳ chọn (hash hàng loạt không cần login từng user): `node backend/scripts/hash-plain-passwords.mjs`.
 
 ---
 
@@ -276,7 +270,7 @@ cd backend && npm run db:migrate
 
 | Triệu chứng | Nguyên nhân | Cách xử lý |
 |-------------|-------------|------------|
-| Login VPS «sai mật khẩu», local OK | Backend cũ hoặc DB chưa import | Deploy code mới + import dump; hoặc `hash-plain-passwords.mjs` |
+| Login VPS «sai mật khẩu», local OK | Chưa `reset-admin` sau import | `SETUP_SECRET` + `POST /api/setup/reset-admin` |
 | «Không tải được danh sách tuyến» trên mobile | Build còn `VITE_API_URL=http://localhost:4002` | Build lại với `same-origin` hoặc `https://tenmien.vn` |
 | 502 Bad Gateway `/api` | PM2/API chưa chạy | `pm2 logs`, `curl 127.0.0.1:4002/api/health` |
 | Đăng nhập không giữ session | `FRONTEND_URL` sai hoặc HTTP/HTTPS lẫn | Khớp domain thật, dùng HTTPS |

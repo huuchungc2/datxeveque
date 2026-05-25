@@ -28,8 +28,8 @@ setupRouter.get("/status", async (_req, res) => {
 });
 
 /**
- * Khôi phục admin khi login VPS vẫn báo sai (chỉ khi SETUP_SECRET trong .env khớp).
- * curl -X POST https://domain/api/setup/reset-admin -H "Content-Type: application/json" -d "{\"secret\":\"...\"}"
+ * Sau import DB từ local (password_hash plain): gọi một lần để bcrypt admin123.
+ * Cần SETUP_SECRET trong .env khi gọi qua HTTPS; từ 127.0.0.1 trên VPS có thể body {}.
  */
 function isLocalRequest(req: { ip?: string; socket?: { remoteAddress?: string } }) {
   const ip = req.ip || req.socket?.remoteAddress || "";

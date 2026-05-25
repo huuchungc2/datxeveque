@@ -26,6 +26,8 @@ start-local.bat
 
 **Demo:** Admin `0900000000` / `admin123` · Tài xế `0900000001` / `taixe123` · Khách `0900000002` / `khach123`
 
+**VPS sau import dump local:** `SETUP_SECRET` trong `backend/.env` → `POST /api/setup/reset-admin` (bcrypt admin). Không dùng `hash-plain-passwords.mjs`. Xem `database/README_IMPORT.md`.
+
 ## Định nghĩa xong
 
 Pass các luồng lõi trong `12_ACCEPTANCE_TEST_FULL.md`, đặc biệt: guest booking, dispatch 3 cột, gán không trùng, tài xế nhận chuyến. Cập nhật `PROGRESS.md` khi hoàn thành nhóm task.

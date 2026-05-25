@@ -1,6 +1,6 @@
 /**
- * Tuỳ chọn: bcrypt hàng loạt sau import dump (admin123, taixe123…).
- * Thường không cần — đăng nhập lần đầu đã tự mã hóa (upgradePasswordIfLegacy).
+ * @deprecated Quy trình chuẩn: SETUP_SECRET + POST /api/setup/reset-admin (bcrypt admin).
+ * Chỉ dùng script này nếu cần bcrypt hàng loạt mọi user (taixe123, khach123…).
  *
  *   cd backend && node scripts/hash-plain-passwords.mjs
  */
