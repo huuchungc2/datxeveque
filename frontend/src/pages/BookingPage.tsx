@@ -6,6 +6,7 @@ import { normalizeVnPhone, PHONE_INVALID_MESSAGE, phoneInputProps, sanitizePhone
 import { allBookingServiceOptions, ROUTE_REQUIRED_SERVICE_TYPES } from "../routes/bookableServices";
 import { usesPassengerCount } from "../lib/bookingSeats";
 import { serviceTypeLabel } from "../lib/serviceTypes";
+import { getContactInfo, useSiteSettings } from "../lib/useSiteSettings";
 
 function canEstimatePrice(form: { type?: string; routeId?: string }) {
   if (!form.type) return false;
@@ -41,6 +42,8 @@ const serviceLabels: Record<string, string> = {
 };
 
 export default function BookingPage({ type = "SHARED_RIDE", title = "Đặt xe về quê", defaultRouteId }: { type?: string; title?: string; defaultRouteId?: number }) {
+  const { settings } = useSiteSettings();
+  const contact = getContactInfo(settings);
   const [routes, setRoutes] = useState<Route[]>([]);
   const [routesError, setRoutesError] = useState("");
   const [price, setPrice] = useState<any>(null);
@@ -189,7 +192,7 @@ export default function BookingPage({ type = "SHARED_RIDE", title = "Đặt xe v
           </div>
           <div className="card">
             <b>Hỗ trợ nhanh</b>
-            <p className="mt-2 text-slate-600">Hotline/Zalo: 0900000000</p>
+            <p className="mt-2 text-slate-600">{contact.footerLine}</p>
             <p className="mt-1 text-sm text-slate-500">Gửi form xong nhân viên sẽ gọi lại xác nhận.</p>
           </div>
         </div>

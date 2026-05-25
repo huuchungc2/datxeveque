@@ -14,6 +14,7 @@ import { ChevronDown, LogOut, Menu, MessageCircle, Phone, UserPlus, X } from "lu
 import { NotificationBell } from "./NotificationBell";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { getContactInfo, useSiteSettings } from "../lib/useSiteSettings";
 import { cargoNavServices, passengerNavServices } from "../routes/bookableServices";
 
 const publicLinks = [
@@ -208,6 +209,8 @@ function PublicMobileNav({
 
 export function PublicLayout({ children }: { children: React.ReactNode }) {
   const { user, reload } = useAuth();
+  const { settings } = useSiteSettings();
+  const contact = getContactInfo(settings);
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -290,20 +293,20 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
           </div>
           <div>
             <b>Liên hệ</b>
-            <p className="mt-2 text-sm text-slate-600">Hotline/Zalo: 0900000000</p>
+            <p className="mt-2 text-sm text-slate-600">{contact.footerLine}</p>
           </div>
           <div>
             <b>Tuyến chính</b>
-            <p className="mt-2 text-sm text-slate-600">Sài Gòn ⇄ Đức Linh / Tánh Linh</p>
+            <p className="mt-2 text-sm text-slate-600">{settings.service_area || "Sài Gòn ⇄ Đức Linh / Tánh Linh"}</p>
           </div>
         </div>
       </footer>
 
       <div className="fixed bottom-0 left-0 right-0 z-50 grid grid-cols-3 gap-2 border-t border-slate-200 bg-white p-2 md:hidden">
-        <a className="btn-secondary py-3" href="tel:0900000000">
+        <a className="btn-secondary py-3" href={`tel:${contact.hotline}`}>
           <Phone size={18} /> Gọi
         </a>
-        <a className="btn-secondary py-3" href="https://zalo.me/0900000000">
+        <a className="btn-secondary py-3" href={contact.zaloUrl} target="_blank" rel="noreferrer">
           <MessageCircle size={18} /> Zalo
         </a>
         <Link className="btn-primary py-3" to="/dat-xe">

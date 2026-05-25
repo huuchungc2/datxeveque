@@ -3,6 +3,7 @@ import { api, formatMoney } from "../lib/api";
 import { defaultDepartureLocal, fmtDepartureTime, toDatetimeLocalValue } from "../lib/datetime";
 import { ROUTE_REQUIRED_SERVICE_TYPES } from "../routes/bookableServices";
 import { usesPassengerCount } from "../lib/bookingSeats";
+import { useSiteSettings } from "../lib/useSiteSettings";
 import { normalizeVnPhone, PHONE_INVALID_MESSAGE, phoneInputProps, sanitizePhoneInput } from "../lib/phone";
 import { SERVICE_TYPE_OPTIONS } from "../lib/serviceTypes";
 import {
@@ -1096,6 +1097,7 @@ export function AdminReports() {
 }
 
 export function AdminSettings() {
+  const { reload: reloadSiteSettings } = useSiteSettings();
   const [rows, setRows] = useState<any[]>([]);
   useEffect(() => {
     api.get("/admin/settings").then((r) => setRows(r.data));
@@ -1103,7 +1105,8 @@ export function AdminSettings() {
   const save = async () => {
     const body: Object = Object.fromEntries(rows.map((r) => [r.key, r.value]));
     await api.put("/admin/settings", body);
-    alert("Đã lưu");
+    reloadSiteSettings();
+    alert("Đã lưu — trang web sẽ hiển thị số/Zalo mới (footer, liên hệ, đặt xe).");
   };
   return (
     <div>

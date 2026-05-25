@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 import './styles/global.css';
 import { AuthProvider } from './lib/auth';
+import { SiteSettingsProvider } from './lib/useSiteSettings';
 import { PublicLayout, DashboardLayout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import HomePage from './pages/HomePage';
@@ -22,7 +23,7 @@ import { CustomerHome } from './pages/CustomerPages';
 import { coreBookableServices } from './routes/bookableServices';
 import { specialtyServicePages } from './routes/serviceRoutes';
 
-function App(){return <HelmetProvider><AuthProvider><BrowserRouter><Routes>
+function App(){return <HelmetProvider><SiteSettingsProvider><AuthProvider><BrowserRouter><Routes>
 <Route path="/" element={<PublicLayout><HomePage/></PublicLayout>} />
 {coreBookableServices.map((s) => (
   <Route key={s.path} path={s.path} element={<PublicLayout><BookingPage type={s.type} title={s.title}/></PublicLayout>} />
@@ -59,6 +60,6 @@ function App(){return <HelmetProvider><AuthProvider><BrowserRouter><Routes>
 <Route path="/tai-xe/san-sang" element={<ProtectedRoute roles={["DRIVER"]}><DashboardLayout type="driver"><DriverAvailability/></DashboardLayout></ProtectedRoute>} />
 <Route path="/tai-xe/cong-no" element={<ProtectedRoute roles={["DRIVER"]}><DashboardLayout type="driver"><DriverDebts/></DashboardLayout></ProtectedRoute>} />
 <Route path="/khach" element={<ProtectedRoute roles={["CUSTOMER"]}><DashboardLayout type="customer"><CustomerHome/></DashboardLayout></ProtectedRoute>} />
-</Routes></BrowserRouter></AuthProvider></HelmetProvider>}
+</Routes></BrowserRouter></AuthProvider></SiteSettingsProvider></HelmetProvider>}
 
 ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>);

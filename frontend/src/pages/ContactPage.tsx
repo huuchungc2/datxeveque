@@ -1,11 +1,10 @@
 import { Helmet } from "react-helmet-async";
 import { MessageCircle, Phone, Mail, MapPin } from "lucide-react";
-import { useSiteSettings } from "../lib/useSiteSettings";
+import { getContactInfo, useSiteSettings } from "../lib/useSiteSettings";
 
 export default function ContactPage() {
   const { settings } = useSiteSettings();
-  const hotline = settings.hotline_primary || "0900000000";
-  const zalo = settings.zalo_phone || hotline;
+  const { hotline, zaloPhone, zaloUrl } = getContactInfo(settings);
 
   return (
     <>
@@ -18,9 +17,9 @@ export default function ContactPage() {
             <Phone className="text-brand-700" size={32} />
             <div><p className="text-sm text-slate-600">Hotline</p><b className="text-lg">{hotline}</b></div>
           </a>
-          <a href={settings.zalo_url || `https://zalo.me/${zalo}`} target="_blank" rel="noreferrer" className="card flex items-center gap-4 transition hover:-translate-y-1">
+          <a href={zaloUrl} target="_blank" rel="noreferrer" className="card flex items-center gap-4 transition hover:-translate-y-1">
             <MessageCircle className="text-brand-700" size={32} />
-            <div><p className="text-sm text-slate-600">Zalo</p><b className="text-lg">{zalo}</b></div>
+            <div><p className="text-sm text-slate-600">Zalo</p><b className="text-lg">{zaloPhone}</b></div>
           </a>
           {settings.email && (
             <div className="card flex items-center gap-4">
