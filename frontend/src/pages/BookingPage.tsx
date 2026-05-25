@@ -1,6 +1,23 @@
 import { useEffect, useState } from "react";
 import { Helmet } from "react-helmet-async";
-import { api, formatMoney, unwrapList } from "../lib/api";
+import { api, API_BASE, formatMoney, unwrapList } from "../lib/api";
+import { defaultDepartureLocal } from "../lib/datetime";
+import { normalizeVnPhone, PHONE_INVALID_MESSAGE, phoneInputProps, sanitizePhoneInput } from "../lib/phone";
+import { allBookingServiceOptions, ROUTE_REQUIRED_SERVICE_TYPES } from "../routes/bookableServices";
+import { usesPassengerCount } from "../lib/bookingSeats";
+import { serviceTypeLabel } from "../lib/serviceTypes";
+
+function canEstimatePrice(form: { type?: string; routeId?: string }) {
+  if (!form.type) return false;
+  if (ROUTE_REQUIRED_SERVICE_TYPES.has(form.type) && !form.routeId) return false;
+  return true;
+}
+
+function priceHint(form: { type?: string; routeId?: string }) {
+  if (!form.type) return "Chọn loại dịch vụ để xem giá tạm tính";
+  if (ROUTE_REQUIRED_SERVICE_TYPES.has(form.type) && !form.routeId) return "Chọn tuyến để xem giá tạm tính";
+  return null;
+}
 
 type Route = {
   id: number;
@@ -37,11 +54,10 @@ export default function BookingPage({ type = "SHARED_RIDE", title = "Đặt xe v
     customerPhone: "",
     pickupAddress: "",
     dropoffAddress: "",
-    scheduledAt: "",
+    scheduledAt: defaultDepartureLocal(),
     passengerCount: 1,
     weightKg: 1,
     vehicleType: "",
-    paymentReceiver: "DRIVER",
     cargoDescription: "",
     marketDescription: "",
     note: "",
@@ -59,7 +75,13 @@ export default function BookingPage({ type = "SHARED_RIDE", title = "Đặt xe v
       })
       .catch((err) => {
         console.error("Không tải được tuyến:", err);
-        setRoutesError(err.response?.data?.message || "Không tải được danh sách tuyến. Kiểm tra backend hoặc VITE_API_URL.");
+        const isNetwork = !err.response;
+        setRoutesError(
+          err.response?.data?.message ||
+            (isNetwork
+              ? `Không kết nối được API (${API_BASE}). Trên điện thoại: mở web bằng IP máy tính (vd. http://192.168.1.x:5173), cùng Wi-Fi, backend đang chạy và Windows Firewall cho phép cổng 4002.`
+              : "Không tải được danh sách tuyến.")
+        );
       })
       .finally(() => setLoadingRoutes(false));
   }, []);
@@ -70,30 +92,44 @@ export default function BookingPage({ type = "SHARED_RIDE", title = "Đặt xe v
   }, [defaultRouteId]);
 
   useEffect(() => {
-    if (form.type) {
-      api
-        .post("/price/estimate", {
-          type: form.type,
-          routeId: form.routeId ? Number(form.routeId) : null,
-          passengerCount: Number(form.passengerCount || 1),
-          weightKg: Number(form.weightKg || 0),
-          vehicleType: form.vehicleType || null,
-        })
-        .then((res) => setPrice(res.data))
-        .catch(() => setPrice({ estimatedTotal: 0, note: "Chưa có bảng giá phù hợp" }));
+    setForm((prev: any) => ({ ...prev, type }));
+  }, [type]);
+
+  useEffect(() => {
+    if (!canEstimatePrice(form)) {
+      setPrice(null);
+      return;
     }
+    api
+      .post("/price/estimate", {
+        type: form.type,
+        routeId: form.routeId ? Number(form.routeId) : null,
+        passengerCount: usesPassengerCount(form.type) ? Number(form.passengerCount || 1) : 0,
+        weightKg: Number(form.weightKg || 0),
+        vehicleType: form.vehicleType || null,
+      })
+      .then((res) => setPrice(res.data))
+      .catch(() => setPrice({ estimatedTotal: 0, note: "Chưa có bảng giá phù hợp" }));
   }, [form.type, form.routeId, form.passengerCount, form.weightKg, form.vehicleType]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitError("");
+    const customerPhone = normalizeVnPhone(form.customerPhone);
+    if (!customerPhone) return setSubmitError(PHONE_INVALID_MESSAGE);
+    if (!form.type) return setSubmitError("Vui lòng chọn loại dịch vụ");
+    if (ROUTE_REQUIRED_SERVICE_TYPES.has(form.type) && !form.routeId) {
+      return setSubmitError("Vui lòng chọn tuyến");
+    }
     try {
       const selectedRoute = routes.find((r) => String(r.id) === String(form.routeId));
       const res = await api.post("/bookings", {
         ...form,
+        customerPhone,
         routeId: form.routeId ? Number(form.routeId) : null,
         direction: selectedRoute?.direction || selectedRoute?.name || null,
-        passengerCount: Number(form.passengerCount || 1),
+        passengerCount: usesPassengerCount(form.type) ? Number(form.passengerCount || 1) : 0,
+        paymentReceiver: "DRIVER",
       });
       setDone(res.data);
     } catch (err: any) {
@@ -102,14 +138,27 @@ export default function BookingPage({ type = "SHARED_RIDE", title = "Đặt xe v
   };
 
   if (done) {
+    const booking = done.booking;
+    const total = Number(
+      booking?.finalTotal ?? booking?.estimatedTotal ?? done.price?.estimatedTotal ?? 0
+    );
+    const routeName = booking?.route?.name || routes.find((r) => r.id === booking?.routeId)?.name;
     return (
       <div className="mx-auto max-w-2xl px-4 py-12">
         <div className="card text-center">
           <h1 className="text-2xl font-bold text-green-700">Đã nhận yêu cầu</h1>
           <p className="mt-3">
-            Mã đơn: <b>{done.booking.code}</b>
+            Mã đơn: <b>{booking?.code}</b>
           </p>
-          <p className="mt-2 text-slate-600">Nhân viên sẽ gọi/Zalo xác nhận lại trước khi điều xe.</p>
+          {routeName && <p className="mt-2 text-slate-600">Tuyến: {routeName}</p>}
+          <div className="mt-6 rounded-2xl bg-slate-50 px-4 py-5">
+            <p className="text-sm font-semibold text-slate-600">Tổng tiền tạm tính</p>
+            <p className="mt-1 text-4xl font-extrabold text-cta">{formatMoney(total)}</p>
+            {done.price?.note && <p className="mt-2 text-sm text-slate-500">{done.price.note}</p>}
+          </div>
+          <p className="mt-4 text-sm text-slate-600">
+            Thanh toán trực tiếp cho <b>tài xế</b> khi đi. Nhân viên sẽ gọi/Zalo xác nhận giá và lịch trước khi điều xe.
+          </p>
         </div>
       </div>
     );
@@ -121,21 +170,27 @@ export default function BookingPage({ type = "SHARED_RIDE", title = "Đặt xe v
         <title>{title} | Đặt Xe Về Quê</title>
       </Helmet>
       <section>
-        <span className="badge">{serviceLabels[type] || "Dịch vụ"}</span>
+        <span className="badge">{serviceTypeLabel[form.type] || serviceLabels[form.type] || "Dịch vụ"}</span>
         <h1 className="mt-4 text-4xl font-extrabold">{title}</h1>
         <p className="mt-3 text-slate-600">
-          Khách không cần đăng nhập vẫn đặt được. Nhập thông tin, hệ thống hiển thị giá tạm tính nếu tuyến có bảng giá. Admin sẽ xác nhận lại trước khi chốt chuyến.
+          Chọn <b>dịch vụ</b> và <b>tuyến</b> (nếu có) để xem giá tạm tính. Nhân viên xác nhận lại trước khi chốt chuyến.
         </p>
         <div className="mt-6 grid gap-4 md:grid-cols-2">
           <div className="card">
             <b>Giá tạm tính</b>
-            <p className="mt-2 text-3xl font-extrabold text-cta">{formatMoney(price?.estimatedTotal)}</p>
-            <p className="mt-2 text-sm text-slate-500">{price?.note || "Chọn tuyến để xem giá tạm tính"}</p>
+            {canEstimatePrice(form) && price ? (
+              <>
+                <p className="mt-2 text-3xl font-extrabold text-cta">{formatMoney(price.estimatedTotal)}</p>
+                <p className="mt-2 text-sm text-slate-500">{price.note}</p>
+              </>
+            ) : (
+              <p className="mt-2 text-lg font-semibold text-slate-500">{priceHint(form) || "—"}</p>
+            )}
           </div>
           <div className="card">
             <b>Hỗ trợ nhanh</b>
             <p className="mt-2 text-slate-600">Hotline/Zalo: 0900000000</p>
-            <p className="mt-1 text-sm text-slate-500">Gửi form xong admin sẽ gọi lại xác nhận.</p>
+            <p className="mt-1 text-sm text-slate-500">Gửi form xong nhân viên sẽ gọi lại xác nhận.</p>
           </div>
         </div>
       </section>
@@ -145,8 +200,30 @@ export default function BookingPage({ type = "SHARED_RIDE", title = "Đặt xe v
         {routesError && <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-600">{routesError}</p>}
         {submitError && <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-600">{submitError}</p>}
 
-        <label className="mt-4 block text-sm font-semibold">Tuyến</label>
-        <select className="input mt-2" value={form.routeId} onChange={(e) => setForm({ ...form, routeId: e.target.value })}>
+        <label className="mt-4 block text-sm font-semibold">Loại dịch vụ *</label>
+        <select
+          className="input mt-2"
+          required
+          value={form.type}
+          onChange={(e) => setForm({ ...form, type: e.target.value })}
+        >
+          <option value="">— Chọn dịch vụ —</option>
+          {allBookingServiceOptions.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+
+        <label className="mt-4 block text-sm font-semibold">
+          Tuyến {ROUTE_REQUIRED_SERVICE_TYPES.has(form.type) ? "*" : ""}
+        </label>
+        <select
+          className="input mt-2"
+          required={ROUTE_REQUIRED_SERVICE_TYPES.has(form.type)}
+          value={form.routeId}
+          onChange={(e) => setForm({ ...form, routeId: e.target.value })}
+        >
           <option value="">{loadingRoutes ? "Đang tải tuyến..." : "Chọn tuyến"}</option>
           {routes.map((r) => (
             <option key={r.id} value={r.id}>
@@ -158,8 +235,15 @@ export default function BookingPage({ type = "SHARED_RIDE", title = "Đặt xe v
         <label className="mt-4 block text-sm font-semibold">Họ tên</label>
         <input className="input mt-2" required value={form.customerName} onChange={(e) => setForm({ ...form, customerName: e.target.value })} />
 
-        <label className="mt-4 block text-sm font-semibold">Số điện thoại/Zalo</label>
-        <input className="input mt-2" required value={form.customerPhone} onChange={(e) => setForm({ ...form, customerPhone: e.target.value })} />
+        <label className="mt-4 block text-sm font-semibold">Số điện thoại/Zalo *</label>
+        <input
+          className="input mt-2"
+          required
+          {...phoneInputProps}
+          value={form.customerPhone}
+          onChange={(e) => setForm({ ...form, customerPhone: sanitizePhoneInput(e.target.value) })}
+        />
+        <p className="mt-1 text-xs text-slate-500">10 chữ số, bắt đầu bằng 0 (ví dụ 0901234567)</p>
 
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <div>
@@ -172,16 +256,27 @@ export default function BookingPage({ type = "SHARED_RIDE", title = "Đặt xe v
           </div>
         </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
-          <div>
-            <label className="block text-sm font-semibold">Thời gian</label>
-            <input className="input mt-2" type="datetime-local" value={form.scheduledAt} onChange={(e) => setForm({ ...form, scheduledAt: e.target.value })} />
-          </div>
-          <div>
-            <label className="block text-sm font-semibold">Số khách</label>
-            <input className="input mt-2" type="number" min="1" value={form.passengerCount} onChange={(e) => setForm({ ...form, passengerCount: e.target.value })} />
-          </div>
-        </div>
+        <label className="mt-4 block text-sm font-semibold">Ngày giờ đi *</label>
+        <input
+          className="input mt-2"
+          type="datetime-local"
+          required
+          value={form.scheduledAt}
+          onChange={(e) => setForm({ ...form, scheduledAt: e.target.value })}
+        />
+
+        {usesPassengerCount(form.type) && (
+          <>
+            <label className="mt-4 block text-sm font-semibold">Số khách</label>
+            <input
+              className="input mt-2"
+              type="number"
+              min="1"
+              value={form.passengerCount}
+              onChange={(e) => setForm({ ...form, passengerCount: e.target.value })}
+            />
+          </>
+        )}
 
         {form.type === "CARGO" && (
           <>
@@ -212,16 +307,19 @@ export default function BookingPage({ type = "SHARED_RIDE", title = "Đặt xe v
           </>
         )}
 
-        <label className="mt-4 block text-sm font-semibold">Khách trả tiền cho</label>
-        <select className="input mt-2" value={form.paymentReceiver} onChange={(e) => setForm({ ...form, paymentReceiver: e.target.value })}>
-          <option value="DRIVER">Tài xế (TX nộp hoa hồng admin)</option>
-          <option value="ADMIN">Admin (admin trả phần tài xế)</option>
-        </select>
-
         <label className="mt-4 block text-sm font-semibold">Ghi chú</label>
         <textarea className="input mt-2" rows={3} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
 
-        <button className="btn-primary mt-6 w-full">Gửi yêu cầu</button>
+        <div className="mt-4 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          Tổng tạm tính:{" "}
+          <b className="text-lg text-cta">
+            {canEstimatePrice(form) && price ? formatMoney(price.estimatedTotal) : "—"}
+          </b>
+          {priceHint(form) && <span className="mt-1 block text-amber-700">{priceHint(form)}</span>}
+          {canEstimatePrice(form) && price?.note && <span className="mt-1 block text-slate-500">{price.note}</span>}
+          <span className="mt-1 block">Thanh toán cho tài xế khi đi (sau khi nhân viên xác nhận).</span>
+        </div>
+        <button className="btn-primary mt-4 w-full">Gửi yêu cầu</button>
       </form>
     </div>
   );

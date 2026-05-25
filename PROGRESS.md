@@ -53,3 +53,11 @@ Cập nhật: 2026-05-24 (sau test tự động)
 | 9. Reports | Done |
 | 10. Settings/CMS | Partial (API; UI test tay) |
 | 11. Data restore | Done (+ `npm run db:migrate`) |
+
+---
+
+## Ghi chú UI (2026-05)
+
+- **Toàn UI tiếng Việt:** `frontend/src/lib/vi.ts` + `serviceTypes.ts`.
+- **Menu accordion (mobile):** `Layout.tsx` — panel ẩn, nhóm gom theo nhấn; doc `frontend/GHI_CHU_LOGIC.md`.
+- **Admin menu:** Vận hành / Tài chính / Hệ thống (`Layout.tsx` `adminNav`).

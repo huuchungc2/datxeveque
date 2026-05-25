@@ -8,13 +8,32 @@ import { publicRouter } from "./routes/public.js";
 import { adminRouter } from "./routes/admin.js";
 import { driverRouter } from "./routes/driver.js";
 import { customerRouter } from "./routes/customer.js";
+import { notificationsRouter } from "./routes/notifications.js";
 import { prisma } from "./lib/prisma.js";
 import { apiResponseMiddleware } from "./middleware/apiResponse.js";
 
 const app = express();
 const port = Number(process.env.PORT || 4002);
+const host = process.env.HOST || "0.0.0.0";
 
-app.use(cors({ origin: process.env.FRONTEND_URL || "http://localhost:5173", credentials: true }));
+const corsOrigins = (process.env.FRONTEND_URL || "http://localhost:5173")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+/** Dev: cho phép mở web từ điện thoại qua IP LAN (5173) gọi API (4002). */
+function corsOriginAllowed(origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
+  if (!origin) return callback(null, true);
+  if (corsOrigins.includes(origin)) return callback(null, true);
+  if (process.env.NODE_ENV !== "production") {
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) return callback(null, true);
+    if (/^https?:\/\/192\.168\.\d{1,3}\.\d{1,3}(:\d+)?$/i.test(origin)) return callback(null, true);
+    if (/^https?:\/\/10\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?$/i.test(origin)) return callback(null, true);
+  }
+  callback(new Error(`CORS: origin không được phép — ${origin}`));
+}
+
+app.use(cors({ origin: corsOriginAllowed, credentials: true }));
 app.use(express.json({ limit: "5mb" }));
 app.use(cookieParser());
 
@@ -30,6 +49,7 @@ app.use("/api", publicRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/driver", driverRouter);
 app.use("/api/customer", customerRouter);
+app.use("/api/notifications", notificationsRouter);
 
 app.get("/robots.txt", (_req, res) => {
   res.type("text/plain").send(`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /driver\nDisallow: /api\nSitemap: ${process.env.PUBLIC_SITE_URL || "http://localhost:5173"}/sitemap.xml\n`);
@@ -43,4 +63,6 @@ app.get("/sitemap.xml", async (_req, res) => {
   res.type("application/xml").send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls.map((u) => `<url><loc>${base}/${u}</loc></url>`).join("")}</urlset>`);
 });
 
-app.listen(port, () => console.log(`Đặt Xe Về Quê API đang chạy tại http://localhost:${port}`));
+app.listen(port, host, () => {
+  console.log(`Đặt Xe Về Quê API đang chạy tại http://localhost:${port} (LAN: port ${port}, host ${host})`);
+});

@@ -9,7 +9,18 @@ import { prisma } from "../lib/prisma.js";
 import { requireAuth, requireRoles } from "../middleware/auth.js";
 import { hashPassword } from "../lib/auth.js";
 import { generateCode } from "../lib/codes.js";
-import { sumBookingRollups } from "../lib/settlement.js";
+import { applyDispatchSuggestion, assignBookingsToTrip } from "../lib/dispatchApply.js";
+import { buildDispatchSuggestions, computeDispatchSeatSummary } from "../lib/dispatchSuggestions.js";
+import {
+  assertDriverAvailableForNewTrip,
+  buildAvailableDriverWhere,
+  getBusyDriverIds,
+  getDriversOnActiveTrips,
+} from "../lib/dispatchDrivers.js";
+import { completeTrip } from "../lib/tripComplete.js";
+import { adminCreateBooking, patchBookingAdmin } from "../lib/adminBooking.js";
+import { normalizeVnPhone, PHONE_INVALID_MESSAGE } from "../lib/phone.js";
+import { createAdminUser, updateAdminUser, userInclude } from "../lib/adminUser.js";
 
 function sanitizePostContent(html: string) {
   return String(html || "").replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
@@ -30,31 +41,64 @@ adminRouter.get("/bookings", async (req, res) => {
   res.json(bookings);
 });
 
-adminRouter.patch("/bookings/:id", async (req, res) => {
-  const data: any = { ...req.body };
-  if (data.routeId) data.routeId = Number(data.routeId);
-  if (data.passengerCount) data.passengerCount = Number(data.passengerCount);
-  if (data.scheduledAt) data.scheduledAt = new Date(data.scheduledAt);
-  const booking = await prisma.booking.update({ where: { id: Number(req.params.id) }, data });
-  res.json(booking);
+adminRouter.post("/bookings", async (req, res) => {
+  try {
+    const booking = await adminCreateBooking(req.body);
+    res.status(201).json(booking);
+  } catch (error: any) {
+    console.error("POST /admin/bookings error:", error);
+    res.status(error.statusCode || 500).json({ message: error.message || "Không tạo được đơn" });
+  }
 });
+
+adminRouter.patch("/bookings/:id", async (req, res) => {
+  try {
+    const booking = await patchBookingAdmin(Number(req.params.id), req.body);
+    res.json(booking);
+  } catch (error: any) {
+    console.error("PATCH /admin/bookings/:id error:", error);
+    res.status(error.statusCode || 500).json({ message: error.message || "Không cập nhật đơn" });
+  }
+});
+
+const adminOnly = requireRoles(["ADMIN"]);
 
 adminRouter.get("/users", async (req, res) => {
   const where: any = {};
   if (req.query.role) where.role = req.query.role;
   if (req.query.status) where.status = req.query.status;
   if (req.query.q) where.OR = [{ name: { contains: String(req.query.q) } }, { phone: { contains: String(req.query.q) } }, { email: { contains: String(req.query.q) } }];
-  const users = await prisma.user.findMany({ where, orderBy: { createdAt: "desc" } });
+  const users = await prisma.user.findMany({ where, orderBy: { createdAt: "desc" }, include: userInclude });
   res.json(users.map(({ passwordHash, ...u }) => u));
 });
 
-adminRouter.post("/users/:id/reset-password", async (req, res) => {
+adminRouter.post("/users", adminOnly, async (req, res) => {
+  try {
+    const user = await createAdminUser(req.body);
+    res.status(201).json(user);
+  } catch (error: any) {
+    console.error("POST /admin/users error:", error);
+    res.status(error.statusCode || 500).json({ message: error.message || "Không tạo được người dùng" });
+  }
+});
+
+adminRouter.patch("/users/:id", adminOnly, async (req, res) => {
+  try {
+    const user = await updateAdminUser(Number(req.params.id), req.body);
+    res.json(user);
+  } catch (error: any) {
+    console.error("PATCH /admin/users/:id error:", error);
+    res.status(error.statusCode || 500).json({ message: error.message || "Không cập nhật người dùng" });
+  }
+});
+
+adminRouter.post("/users/:id/reset-password", adminOnly, async (req, res) => {
   const password = req.body.password || "123456";
   await prisma.user.update({ where: { id: Number(req.params.id) }, data: { passwordHash: await hashPassword(password) } });
   res.json({ message: "Đã reset mật khẩu", password });
 });
 
-adminRouter.patch("/users/:id/status", async (req, res) => {
+adminRouter.patch("/users/:id/status", adminOnly, async (req, res) => {
   const user = await prisma.user.update({ where: { id: Number(req.params.id) }, data: { status: req.body.status } });
   res.json(user);
 });
@@ -65,8 +109,23 @@ adminRouter.get("/drivers", async (_req, res) => {
 });
 
 adminRouter.patch("/drivers/:id", async (req, res) => {
-  const driver = await prisma.driver.update({ where: { id: Number(req.params.id) }, data: req.body });
-  res.json(driver);
+  try {
+    const data: any = { ...req.body };
+    if (data.phone !== undefined) {
+      const phone = normalizeVnPhone(data.phone);
+      if (!phone) return res.status(400).json({ message: PHONE_INVALID_MESSAGE });
+      data.phone = phone;
+    }
+    if (data.zaloPhone !== undefined && data.zaloPhone) {
+      const zalo = normalizeVnPhone(data.zaloPhone);
+      if (!zalo) return res.status(400).json({ message: "Số Zalo phải đủ 10 chữ số, bắt đầu bằng 0" });
+      data.zaloPhone = zalo;
+    }
+    const driver = await prisma.driver.update({ where: { id: Number(req.params.id) }, data });
+    res.json(driver);
+  } catch (error: any) {
+    res.status(error.statusCode || 500).json({ message: error.message || "Không cập nhật tài xế" });
+  }
 });
 
 adminRouter.get("/routes", async (_req, res) => res.json(await prisma.route.findMany({ orderBy: { id: "asc" } })));
@@ -93,7 +152,8 @@ adminRouter.get("/dispatch", async (req, res) => {
       status: { in: UNASSIGNED_STATUSES },
     };
     const whereTrip: any = { status: { in: [TripStatus.COLLECTING, TripStatus.READY] } };
-    const whereDriver: any = { OR: [{ status: "Rảnh" }, { status: "available" }, { status: "AVAILABLE" }] };
+    const busyDriverIds = await getBusyDriverIds();
+    const whereDriver: any = buildAvailableDriverWhere(busyDriverIds);
 
     if (req.query.routeId) {
       const routeId = Number(req.query.routeId);
@@ -136,10 +196,33 @@ adminRouter.get("/dispatch", async (req, res) => {
       prisma.route.findMany({ orderBy: { id: "asc" } }),
     ]);
 
-    res.json({ unassignedBookings, collectingTrips, availableDrivers, routes });
+    const suggestions = buildDispatchSuggestions(unassignedBookings, collectingTrips, availableDrivers);
+    const seatSummary = computeDispatchSeatSummary(unassignedBookings);
+
+    const driversOnTrip = await getDriversOnActiveTrips();
+
+    res.json({
+      unassignedBookings,
+      collectingTrips,
+      availableDrivers,
+      driversOnTrip,
+      routes,
+      suggestions,
+      seatSummary,
+    });
   } catch (error) {
     console.error("GET /admin/dispatch error:", error);
     res.status(500).json({ message: "Không tải được dữ liệu điều phối" });
+  }
+});
+
+adminRouter.post("/dispatch/apply", async (req, res) => {
+  try {
+    const result = await applyDispatchSuggestion(req.body);
+    res.json({ ok: true, ...result });
+  } catch (error: any) {
+    console.error("POST /admin/dispatch/apply error:", error);
+    res.status(error.statusCode || 500).json({ message: error.message || "Không áp dụng được gợi ý" });
   }
 });
 
@@ -150,6 +233,8 @@ adminRouter.get("/trips", async (_req, res) => {
 
 adminRouter.post("/trips", async (req, res) => {
   try {
+    if (req.body.driverId) await assertDriverAvailableForNewTrip(Number(req.body.driverId));
+
     let trip: any = null;
     for (let attempt = 0; attempt < 5; attempt++) {
       try {
@@ -179,18 +264,55 @@ adminRouter.post("/trips", async (req, res) => {
 
 adminRouter.patch("/trips/:id", async (req, res) => {
   try {
+    const tripId = Number(req.params.id);
+    if (req.body.status === TripStatus.COMPLETED) {
+      const result = await completeTrip(tripId, { completedBy: "ADMIN", userId: req.user?.id });
+      return res.json(result);
+    }
+
+    if (req.body.driverId) await assertDriverAvailableForNewTrip(Number(req.body.driverId));
+
     const data: any = {};
     if (req.body.status) data.status = req.body.status;
     if (req.body.driverId !== undefined) data.driverId = req.body.driverId ? Number(req.body.driverId) : null;
     if (req.body.vehicleId !== undefined) data.vehicleId = req.body.vehicleId ? Number(req.body.vehicleId) : null;
     if (req.body.departureAt) data.departureAt = new Date(req.body.departureAt);
     if (req.body.note !== undefined) data.note = req.body.note;
-    const trip = await prisma.trip.update({ where: { id: Number(req.params.id) }, data, include: { route: true, driver: true, vehicle: true } });
+    const trip = await prisma.trip.update({ where: { id: tripId }, data, include: { route: true, driver: true, vehicle: true } });
     res.json(trip);
-  } catch (error) {
+  } catch (error: any) {
     console.error("PATCH /admin/trips/:id error:", error);
-    res.status(500).json({ message: "Không cập nhật được chuyến" });
+    res.status(error.statusCode || 500).json({ message: error.message || "Không cập nhật được chuyến" });
   }
+});
+
+adminRouter.post("/trips/:id/complete", async (req, res) => {
+  try {
+    const result = await completeTrip(Number(req.params.id), { completedBy: "ADMIN", userId: req.user?.id });
+    res.json({ ok: true, ...result });
+  } catch (error: any) {
+    console.error("POST /admin/trips/:id/complete error:", error);
+    res.status(error.statusCode || 500).json({ message: error.message || "Không hoàn thành chuyến" });
+  }
+});
+
+adminRouter.get("/trips/:id/financial-snapshots", async (req, res) => {
+  const items = await prisma.tripFinancialSnapshot.findMany({
+    where: { tripId: Number(req.params.id) },
+    orderBy: { createdAt: "desc" },
+  });
+  res.json(
+    items.map((row) => ({
+      ...row,
+      snapshot: (() => {
+        try {
+          return JSON.parse(row.snapshotJson);
+        } catch {
+          return null;
+        }
+      })(),
+    }))
+  );
 });
 
 adminRouter.post("/trips/:id/add-bookings", async (req, res) => {
@@ -200,50 +322,7 @@ adminRouter.post("/trips/:id/add-bookings", async (req, res) => {
     const bookingIds = Array.from(new Set(rawBookingIds.map(Number).filter(Boolean))) as number[];
     if (!bookingIds.length) return res.status(400).json({ message: "Chưa chọn đơn để gán" });
 
-    const result = await prisma.$transaction(async (tx) => {
-      const trip = await tx.trip.findUnique({ where: { id: tripId } });
-      if (!trip) throw Object.assign(new Error("Không tìm thấy chuyến"), { statusCode: 404 });
-
-      const existing = await tx.tripBooking.findMany({
-        where: { tripId, bookingId: { in: bookingIds } },
-        select: { bookingId: true },
-      });
-      const existingIds = new Set(existing.map((x) => x.bookingId));
-      const newBookingIds = bookingIds.filter((id) => !existingIds.has(id));
-
-      if (!newBookingIds.length) {
-        return { added: 0, skipped: bookingIds.length, message: "Các đơn đã nằm trong chuyến, không cộng thêm ghế/tiền." };
-      }
-
-      const bookings = await tx.booking.findMany({ where: { id: { in: newBookingIds } } });
-      const seats = bookings.reduce((s, b) => s + Number(b.passengerCount || 0), 0);
-      if (seats <= 0) throw Object.assign(new Error("Số ghế không hợp lệ"), { statusCode: 400 });
-      if (Number(trip.availableSeats) < seats) throw Object.assign(new Error("Chuyến không đủ ghế trống"), { statusCode: 400 });
-
-      for (const id of newBookingIds) {
-        await tx.tripBooking.create({ data: { tripId, bookingId: id } });
-      }
-
-      await tx.booking.updateMany({ where: { id: { in: newBookingIds } }, data: { status: BookingStatus.ASSIGNED } });
-
-      const fin = sumBookingRollups(bookings);
-
-      const updatedTrip = await tx.trip.update({
-        where: { id: tripId },
-        data: {
-          bookedSeats: { increment: seats },
-          availableSeats: { decrement: seats },
-          totalCustomerAmount: { increment: fin.total },
-          adminCommission: { increment: fin.commission },
-          driverNetAmount: { increment: fin.driverAmount },
-          driverDebtAmount: { increment: fin.driverOwesAdmin },
-          adminOwesDriverAmount: { increment: fin.adminOwesDriver },
-        },
-      });
-
-      return { added: newBookingIds.length, skipped: bookingIds.length - newBookingIds.length, seats, ...fin, trip: updatedTrip };
-    });
-
+    const result = await assignBookingsToTrip(tripId, bookingIds);
     res.json({ ok: true, ...result });
   } catch (error: any) {
     console.error("POST /admin/trips/:id/add-bookings error:", error);

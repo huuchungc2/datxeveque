@@ -288,14 +288,28 @@ adminCommission
 driverNetAmount
 driverDebtAmount
 adminOwesDriverAmount
-settlementDirection
 settlementStatus
+completedAt nullable
 note nullable
 createdAt
 updatedAt
 ```
 
-# 11. Bảng trip_bookings
+# 11. Bảng trip_financial_snapshots
+
+Lịch sử chốt hoa hồng khi chuyến `COMPLETED` (admin hoặc tài xế xác nhận).
+
+```txt
+id
+tripId
+eventType default COMPLETED
+snapshotJson
+completedBy nullable ADMIN|DRIVER
+userId nullable
+createdAt
+```
+
+# 12. Bảng trip_bookings
 
 ```txt
 id

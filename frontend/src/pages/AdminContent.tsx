@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
+import { postStatus, MEDIA_USAGE_VI } from "../lib/vi";
 
 export function AdminPosts() {
   const [posts, setPosts] = useState<any[]>([]);
@@ -15,7 +16,7 @@ export function AdminPosts() {
   }, []);
 
   const save = async () => {
-    if (!form.title || !form.slug || !form.content) return alert("Nhập tiêu đề, slug và nội dung");
+    if (!form.title || !form.slug || !form.content) return alert("Nhập tiêu đề, đường dẫn và nội dung");
     await api.post("/admin/posts", { ...form, categoryId: form.categoryId || null });
     setForm({ title: "", slug: "", excerpt: "", content: "", categoryId: "", status: "DRAFT", seoTitle: "", seoDescription: "" });
     load();
@@ -29,12 +30,12 @@ export function AdminPosts() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold">Bài viết SEO</h1>
+      <h1 className="text-3xl font-bold">Bài viết</h1>
       <div className="card mt-5 grid gap-3">
         <input className="input" placeholder="Tiêu đề" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-        <input className="input" placeholder="slug-bai-viet" value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} />
+        <input className="input" placeholder="Đường dẫn bài (vd. kinh-nghiem-dat-xe)" value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} />
         <textarea className="input" rows={2} placeholder="Mô tả ngắn" value={form.excerpt} onChange={(e) => setForm({ ...form, excerpt: e.target.value })} />
-        <textarea className="input" rows={6} placeholder="Nội dung HTML" value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} />
+        <textarea className="input" rows={6} placeholder="Nội dung bài viết" value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} />
         <select className="input" value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })}>
           <option value="">Danh mục</option>
           {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -48,7 +49,7 @@ export function AdminPosts() {
       <div className="mt-5 grid gap-3">
         {posts.map((p) => (
           <div className="card flex flex-wrap items-center justify-between gap-3" key={p.id}>
-            <div><b>{p.title}</b><p className="text-sm text-slate-600">/{p.slug} • {p.status}</p></div>
+            <div><b>{p.title}</b><p className="text-sm text-slate-600">/{p.slug} • {postStatus(p.status)}</p></div>
             {p.status !== "PUBLISHED" && <button className="btn-secondary py-2" onClick={() => publish(p.id)}>Xuất bản</button>}
           </div>
         ))}
@@ -68,7 +69,7 @@ export function AdminMedia() {
   }, []);
 
   const upload = async () => {
-    if (!file || !meta.altText.trim()) return alert("Chọn ảnh và nhập alt text");
+    if (!file || !meta.altText.trim()) return alert("Chọn ảnh và nhập mô tả ảnh (bắt buộc)");
     const fd = new FormData();
     fd.append("file", file);
     fd.append("altText", meta.altText);
@@ -78,7 +79,7 @@ export function AdminMedia() {
     setFile(null);
     setMeta({ altText: "", title: "", usageType: "general" });
     load();
-    alert("Đã upload WebP");
+    alert("Đã tải ảnh lên");
   };
 
   return (
@@ -86,14 +87,16 @@ export function AdminMedia() {
       <h1 className="text-3xl font-bold">Thư viện ảnh</h1>
       <div className="card mt-5 grid gap-3 md:grid-cols-2">
         <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} />
-        <input className="input" placeholder="Alt text (bắt buộc)" value={meta.altText} onChange={(e) => setMeta({ ...meta, altText: e.target.value })} />
+        <input className="input" placeholder="Mô tả ảnh (bắt buộc)" value={meta.altText} onChange={(e) => setMeta({ ...meta, altText: e.target.value })} />
         <input className="input" placeholder="Tiêu đề" value={meta.title} onChange={(e) => setMeta({ ...meta, title: e.target.value })} />
         <select className="input" value={meta.usageType} onChange={(e) => setMeta({ ...meta, usageType: e.target.value })}>
-          <option value="general">Chung</option>
-          <option value="hero">Hero</option>
-          <option value="service">Dịch vụ</option>
+          {Object.entries(MEDIA_USAGE_VI).map(([k, v]) => (
+            <option key={k} value={k}>
+              {v}
+            </option>
+          ))}
         </select>
-        <button className="btn-primary md:col-span-2" onClick={upload}>Upload WebP</button>
+        <button className="btn-primary md:col-span-2" onClick={upload}>Tải ảnh lên</button>
       </div>
       <div className="mt-5 grid gap-3 md:grid-cols-3">
         {items.map((m) => (

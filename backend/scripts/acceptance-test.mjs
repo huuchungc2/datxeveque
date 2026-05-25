@@ -138,6 +138,10 @@ async function main() {
   const dispatch = await req("/admin/dispatch");
   if (dispatch.data?.unassignedBookings && dispatch.data?.collectingTrips && dispatch.data?.availableDrivers) {
     pass("GET /admin/dispatch 3 cột", `đơn ${dispatch.data.unassignedBookings.length}, chuyến ${dispatch.data.collectingTrips.length}, TX ${dispatch.data.availableDrivers.length}`);
+    if (Array.isArray(dispatch.data.suggestions)) pass("Gợi ý điều phối tự động", `${dispatch.data.suggestions.length} nhóm`);
+    else fail("dispatch.suggestions", "thiếu mảng suggestions");
+    if (Array.isArray(dispatch.data.driversOnTrip)) pass("Tách TX đang chạy / TX rảnh");
+    else fail("dispatch.driversOnTrip", "thiếu");
   } else fail("GET /admin/dispatch", JSON.stringify(Object.keys(dispatch.data || {})));
 
   // Pricing ADMIN payment receiver booking

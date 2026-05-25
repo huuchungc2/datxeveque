@@ -171,7 +171,23 @@ Công nợ
 Chi tiết chuyến
 ```
 
-# 10. Acceptance
+# 10. Hoàn thành chuyến — chốt hoa hồng & tài xế rảnh
+
+Khi **admin** hoặc **tài xế** xác nhận chuyến `COMPLETED`:
+
+1. Lưu bản ghi `trip_financial_snapshots` (JSON từng đơn: giá, HH, `payment_receiver`, snapshot lúc đặt vé).
+2. Chốt lại tổng trên `trips`: `total_customer_amount`, `admin_commission`, `driver_debt_amount`, `admin_owes_driver_amount` — **theo số trên booking tại thời điểm hoàn thành** (admin đã sửa giá trước đó thì dùng số đã sửa).
+3. Đơn trong chuyến → `COMPLETED`.
+4. Tài xế (nếu có): `status = Rảnh`, cập nhật **vị trí = điểm đến**, **chiều nhận = chiều ngược** để điều phối về:
+   - Vừa chạy **SG → Đức Linh/Tánh Linh** → đứng **Đức Linh/Tánh Linh**, chiều **ĐL/TL → SG**.
+   - Vừa chạy **tỉnh → SG** → đứng **Sài Gòn (HCM)**, chiều **SG → Đức Linh/Tánh Linh**.
+5. `seats_free` = số chỗ xe (sẵn sàng nhận khách mới).
+
+API: `PATCH /api/admin/trips/:id` `{ status: "COMPLETED" }`, `POST /api/admin/trips/:id/complete`, tương tự `/api/driver/jobs/:id`.
+
+Báo cáo / công nợ đọc từ chuyến đã chốt + bảng snapshot (lịch sử đối soát).
+
+# 11. Acceptance
 
 ```txt
 [ ] Xe ghép 2 khách tính đúng tổng tiền.

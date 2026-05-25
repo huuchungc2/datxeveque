@@ -1,8 +1,8 @@
 import { Router } from "express";
-import { BookingStatus, BookingType } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { calculatePrice } from "../lib/pricing.js";
-import { generateCode } from "../lib/codes.js";
+import { createBookingRecord } from "../lib/createBooking.js";
+import { assertVnPhone, PHONE_INVALID_MESSAGE } from "../lib/phone.js";
 
 export const publicRouter = Router();
 
@@ -72,69 +72,33 @@ publicRouter.post("/price/estimate", async (req, res) => {
 
 publicRouter.post("/bookings", async (req, res) => {
   try {
-    const type = req.body.type as BookingType;
-    const routeId = req.body.routeId ? Number(req.body.routeId) : null;
-    const passengerCount = Math.max(1, Number(req.body.passengerCount || 1));
-
-    if (!req.body.customerName?.trim()) return res.status(400).json({ message: "Vui lòng nhập họ tên" });
-    if (!req.body.customerPhone?.trim()) return res.status(400).json({ message: "Vui lòng nhập số điện thoại/Zalo" });
-
-    const price = await calculatePrice({
-      type,
-      routeId,
-      passengerCount,
-      weightKg: req.body.weightKg,
-      vehicleType: req.body.vehicleType,
+    const booking = await createBookingRecord({
+      ...req.body,
+      paymentReceiver: "DRIVER",
+      source: "WEBSITE",
     });
-
-    let customer = await prisma.customer.findFirst({ where: { phone: req.body.customerPhone.trim() } });
-    if (!customer) {
-      customer = await prisma.customer.create({ data: { name: req.body.customerName.trim(), phone: req.body.customerPhone.trim() } });
-    }
-
-    let booking: any = null;
-    for (let attempt = 0; attempt < 5; attempt++) {
-      try {
-        booking = await prisma.booking.create({
-          data: {
-            code: generateCode("DX"),
-        customerId: customer.id,
-        customerName: req.body.customerName.trim(),
-        customerPhone: req.body.customerPhone.trim(),
-        type,
-        routeId,
-        direction: req.body.direction || null,
-        pickupAddress: req.body.pickupAddress || null,
-        dropoffAddress: req.body.dropoffAddress || null,
-        scheduledAt: req.body.scheduledAt ? new Date(req.body.scheduledAt) : null,
-        passengerCount,
-        vehicleType: req.body.vehicleType || null,
-        cargoDescription: req.body.cargoDescription || null,
-        marketDescription: req.body.marketDescription || null,
-        note: req.body.note || null,
-        status: BookingStatus.WAITING_DISPATCH,
-        estimatedTotal: price.estimatedTotal || 0,
-        finalTotal: price.estimatedTotal || 0,
-        commissionAmount: price.commissionAmount || 0,
-            paymentReceiver: req.body.paymentReceiver || "DRIVER",
-          },
-        });
-        break;
-      } catch (err: any) {
-        if (String(err?.code) !== "P2002" || attempt === 4) throw err;
-      }
-    }
-
+    const price = JSON.parse(booking.pricingSnapshotJson || "{}").price;
     res.json({ booking, price });
-  } catch (error) {
+  } catch (error: any) {
     console.error("POST /bookings error:", error);
-    res.status(500).json({ message: "Không tạo được đơn. Vui lòng thử lại hoặc gọi hotline." });
+    res
+      .status(error.statusCode || 500)
+      .json({ message: error.message || "Không tạo được đơn. Vui lòng thử lại hoặc gọi hotline." });
   }
 });
 
 publicRouter.post("/track-booking", async (req, res) => {
   try {
-    const booking = await prisma.booking.findFirst({ where: { code: req.body.code, customerPhone: req.body.phone }, include: { route: true } });
+    let trackPhone: string;
+    try {
+      trackPhone = assertVnPhone(req.body.phone);
+    } catch (e: any) {
+      return res.status(e.statusCode || 400).json({ message: e.message || PHONE_INVALID_MESSAGE });
+    }
+    const booking = await prisma.booking.findFirst({
+      where: { code: req.body.code, customerPhone: trackPhone },
+      include: { route: true },
+    });
     if (!booking) return res.status(404).json({ message: "Không tìm thấy đơn" });
     res.json(booking);
   } catch (error) {

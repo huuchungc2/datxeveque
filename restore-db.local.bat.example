@@ -1,0 +1,9 @@
+@echo off
+REM Doi ten file thanh: restore-db.local.bat (khong commit neu co mat khau)
+REM Vi du XAMPP — root thuong khong mat khau:
+set "MYSQL_EXE=C:\xampp\mysql\bin\mysql.exe"
+set "MYSQL_USER=root"
+set "MYSQL_PASS="
+
+REM Neu root co mat khau:
+REM set "MYSQL_PASS=mat_khau_cua_ban"

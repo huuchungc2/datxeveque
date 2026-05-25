@@ -1,12 +1,7 @@
 import axios from "axios";
+import { resolveApiBase } from "./resolveApiBase";
 
-function normalizeApiBase(value?: string) {
-  const raw = (value || "http://localhost:4002").trim().replace(/\/+$/, "");
-  // Cho phép .env ghi cả http://localhost:4002 hoặc http://localhost:4002/api đều chạy được.
-  return raw.endsWith("/api") ? raw : `${raw}/api`;
-}
-
-export const API_BASE = normalizeApiBase(import.meta.env.VITE_API_URL);
+export const API_BASE = resolveApiBase();
 
 export const api = axios.create({
   baseURL: API_BASE,

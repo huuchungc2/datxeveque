@@ -64,20 +64,44 @@ enum SettlementStatus {
   DISPUTED
 }
 
+enum NotificationType {
+  BOOKING_NEW
+  DISPATCH_ASSIGNED
+  DRIVER_TRIP_ASSIGNED
+}
+
 model User {
-  id           Int        @id @default(autoincrement())
-  name         String
-  phone        String     @unique
-  email        String?    @unique
-  passwordHash String     @map("password_hash")
-  role         UserRole
-  status       UserStatus @default(ACTIVE)
-  createdAt    DateTime   @default(now()) @map("created_at")
-  updatedAt    DateTime   @updatedAt @map("updated_at")
-  customer     Customer?
-  driver       Driver?
+  id            Int            @id @default(autoincrement())
+  name          String
+  phone         String         @unique
+  email         String?        @unique
+  passwordHash  String         @map("password_hash")
+  role          UserRole
+  status        UserStatus     @default(ACTIVE)
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+  customer      Customer?
+  driver        Driver?
+  notifications Notification[]
 
   @@map("users")
+}
+
+model Notification {
+  id         Int              @id @default(autoincrement())
+  userId     Int              @map("user_id")
+  type       NotificationType
+  title      String
+  body       String           @db.Text
+  link       String?
+  entityType String?          @map("entity_type")
+  entityId   Int?             @map("entity_id")
+  readAt     DateTime?        @map("read_at")
+  createdAt  DateTime         @default(now()) @map("created_at")
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+  @@map("notifications")
 }
 
 model Customer {
@@ -217,6 +241,7 @@ model Booking {
   estimatedTotal      Decimal       @default(0) @map("estimated_total") @db.Decimal(12, 2)
   finalTotal          Decimal       @default(0) @map("final_total") @db.Decimal(12, 2)
   commissionAmount    Decimal       @default(0) @map("commission_amount") @db.Decimal(12, 2)
+  pricingSnapshotJson String?       @map("pricing_snapshot_json") @db.LongText
   paymentReceiver     String        @default("DRIVER") @map("payment_receiver")
   source              String        @default("WEBSITE")
   createdAt           DateTime      @default(now()) @map("created_at")
@@ -245,6 +270,7 @@ model Trip {
   driverDebtAmount    Decimal      @default(0) @map("driver_debt_amount") @db.Decimal(12, 2)
   adminOwesDriverAmount Decimal    @default(0) @map("admin_owes_driver_amount") @db.Decimal(12, 2)
   settlementStatus    SettlementStatus @default(PENDING) @map("settlement_status")
+  completedAt         DateTime?    @map("completed_at")
   note                String?      @db.Text
   createdAt           DateTime     @default(now()) @map("created_at")
   updatedAt           DateTime     @updatedAt @map("updated_at")
@@ -252,8 +278,22 @@ model Trip {
   driver              Driver?      @relation(fields: [driverId], references: [id])
   vehicle             Vehicle?     @relation(fields: [vehicleId], references: [id])
   tripBookings        TripBooking[]
+  financialSnapshots  TripFinancialSnapshot[]
 
   @@map("trips")
+}
+
+model TripFinancialSnapshot {
+  id           Int      @id @default(autoincrement())
+  tripId       Int      @map("trip_id")
+  eventType    String   @default("COMPLETED") @map("event_type")
+  snapshotJson String   @map("snapshot_json") @db.LongText
+  completedBy  String?  @map("completed_by")
+  userId       Int?     @map("user_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  trip         Trip     @relation(fields: [tripId], references: [id])
+
+  @@map("trip_financial_snapshots")
 }
 
 model TripBooking {

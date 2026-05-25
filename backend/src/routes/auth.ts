@@ -3,12 +3,18 @@ import { UserRole } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { hashPassword, setAuthCookie, signToken, verifyPassword } from "../lib/auth.js";
 import { requireAuth } from "../middleware/auth.js";
+import { assertVnPhone, PHONE_INVALID_MESSAGE } from "../lib/phone.js";
 
 export const authRouter = Router();
 
 authRouter.post("/login", async (req, res) => {
-  const { phone, password } = req.body;
-  const cleanPhone = String(phone || "").trim();
+  const { password } = req.body;
+  let cleanPhone: string;
+  try {
+    cleanPhone = assertVnPhone(req.body.phone);
+  } catch (e: any) {
+    return res.status(e.statusCode || 400).json({ message: e.message || PHONE_INVALID_MESSAGE });
+  }
   const user = await prisma.user.findUnique({ where: { phone: cleanPhone } });
   if (!user || String(user.status).toUpperCase() !== "ACTIVE") return res.status(401).json({ message: "Số điện thoại hoặc mật khẩu không đúng" });
   const ok = await verifyPassword(String(password || ""), user.passwordHash);
@@ -19,11 +25,15 @@ authRouter.post("/login", async (req, res) => {
 });
 
 authRouter.post("/register", async (req, res) => {
-  const { name, phone, password, role, vehicleType, licensePlate, seats, serviceArea } = req.body;
-  const cleanPhone = String(phone || "").trim();
+  const { name, password, role, vehicleType, licensePlate, seats, serviceArea } = req.body;
   const cleanName = String(name || "").trim();
   if (!cleanName) return res.status(400).json({ message: "Vui lòng nhập họ tên" });
-  if (!cleanPhone) return res.status(400).json({ message: "Vui lòng nhập số điện thoại" });
+  let cleanPhone: string;
+  try {
+    cleanPhone = assertVnPhone(req.body.phone);
+  } catch (e: any) {
+    return res.status(e.statusCode || 400).json({ message: e.message || PHONE_INVALID_MESSAGE });
+  }
   if (String(password || "").length < 6) return res.status(400).json({ message: "Mật khẩu tối thiểu 6 ký tự" });
   const safeRole = role === "DRIVER" ? UserRole.DRIVER : UserRole.CUSTOMER;
   const exists = await prisma.user.findUnique({ where: { phone: cleanPhone } });

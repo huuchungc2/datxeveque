@@ -19,15 +19,15 @@ import TrackBookingPage from './pages/TrackBookingPage';
 import ContactPage from './pages/ContactPage';
 import { DriverAvailability, DriverDebts, DriverJobs } from './pages/DriverPages';
 import { CustomerHome } from './pages/CustomerPages';
-import { servicePages } from './routes/serviceRoutes';
+import { coreBookableServices } from './routes/bookableServices';
+import { specialtyServicePages } from './routes/serviceRoutes';
 
 function App(){return <HelmetProvider><AuthProvider><BrowserRouter><Routes>
 <Route path="/" element={<PublicLayout><HomePage/></PublicLayout>} />
-<Route path="/dat-xe" element={<PublicLayout><BookingPage type="SHARED_RIDE" title="Đặt xe về quê"/></PublicLayout>} />
-<Route path="/gui-hang" element={<PublicLayout><BookingPage type="CARGO" title="Gửi hàng về quê"/></PublicLayout>} />
-<Route path="/di-cho-que" element={<PublicLayout><BookingPage type="MARKET" title="Đi chợ quê giùm"/></PublicLayout>} />
-<Route path="/thue-xe-hop-dong" element={<PublicLayout><BookingPage type="CONTRACT" title="Thuê xe hợp đồng"/></PublicLayout>} />
-{servicePages.map((s) => (
+{coreBookableServices.map((s) => (
+  <Route key={s.path} path={s.path} element={<PublicLayout><BookingPage type={s.type} title={s.title}/></PublicLayout>} />
+))}
+{specialtyServicePages.map((s) => (
   <Route key={s.path} path={s.path} element={<PublicLayout><BookingPage type={s.type} title={s.title}/></PublicLayout>} />
 ))}
 <Route path="/dang-nhap" element={<PublicLayout><LoginPage/></PublicLayout>} />
@@ -43,6 +43,7 @@ function App(){return <HelmetProvider><AuthProvider><BrowserRouter><Routes>
 <Route path="/admin/don-hang" element={<ProtectedRoute roles={["ADMIN","DISPATCHER","ACCOUNTANT"]}><DashboardLayout type="admin"><AdminBookings/></DashboardLayout></ProtectedRoute>} />
 <Route path="/admin/dispatch" element={<ProtectedRoute roles={["ADMIN","DISPATCHER","ACCOUNTANT"]}><DashboardLayout type="admin"><AdminDispatch/></DashboardLayout></ProtectedRoute>} />
 <Route path="/admin/dieu-phoi" element={<ProtectedRoute roles={["ADMIN","DISPATCHER","ACCOUNTANT"]}><DashboardLayout type="admin"><AdminTrips/></DashboardLayout></ProtectedRoute>} />
+<Route path="/admin/chuyen-xe" element={<Navigate to="/admin/dieu-phoi" replace />} />
 <Route path="/admin/tai-xe" element={<ProtectedRoute roles={["ADMIN","DISPATCHER","ACCOUNTANT"]}><DashboardLayout type="admin"><AdminDrivers/></DashboardLayout></ProtectedRoute>} />
 <Route path="/admin/users" element={<ProtectedRoute roles={["ADMIN"]}><DashboardLayout type="admin"><AdminUsers/></DashboardLayout></ProtectedRoute>} />
 <Route path="/admin/bao-cao" element={<ProtectedRoute roles={["ADMIN","ACCOUNTANT"]}><DashboardLayout type="admin"><AdminReports/></DashboardLayout></ProtectedRoute>} />

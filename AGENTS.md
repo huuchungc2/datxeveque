@@ -34,5 +34,18 @@ Pass các luồng lõi trong `12_ACCEPTANCE_TEST_FULL.md`, đặc biệt: guest 
 
 - `backend/` — Express + Prisma  
 - `frontend/` — React SPA  
-- `dat_xe_ve_que_FULL_RESTORE_WORKING.sql` — restore DB + seed  
+- `database/dat_xe_ve_que_react_express_full_restore.sql` — restore DB (chạy qua `restore-db.bat`)  
 - `01_*.md` … `13_*.md` — product/API specs (không sửa stack trong code nếu spec không đổi)
+
+## Ghi chú logic (nhớ khi sửa code)
+
+| File | Nội dung |
+|------|----------|
+| `frontend/GHI_CHU_LOGIC.md` | Menu accordion, `vi.ts`, đặt xe, điều phối, restore encoding |
+| `frontend/src/components/Layout.tsx` | Accordion mobile/desktop; `adminNav` 3 nhóm |
+| `frontend/src/lib/vi.ts` | Nhãn tiếng Việt cho enum — dùng helper, không show raw status |
+| `DISPATCH_SETTLEMENT_LOGIC.md` | Gom chuyến, ghế, công nợ (backend) |
+
+**Menu mobile:** đóng mặc định → bấm ☰ → bấm từng nhóm mới bung; chỉ **một** nhóm mở; đổi route thì đóng panel.
+
+**Favicon/logo:** file ảnh nằm `frontend/public/` — nếu thiếu, chạy patch `README_ICON_PATCH.md` / zip `dxvq-web-favicon-pwa-share-icons-patch.zip`.

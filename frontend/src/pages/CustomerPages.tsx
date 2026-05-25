@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, formatMoney } from "../lib/api";
+import { usesPassengerCount } from "../lib/bookingSeats";
+import { bookingStatus } from "../lib/vi";
 
 export function CustomerHome() {
   const [bookings, setBookings] = useState<any[]>([]);
@@ -38,11 +40,15 @@ export function CustomerHome() {
                 <h2 className="text-xl font-bold">{b.code}</h2>
                 <p className="mt-2 text-slate-600">{b.route?.name || b.direction || "Chưa chọn tuyến"}</p>
               </div>
-              <span className="badge">{b.status}</span>
+              <span className="badge">{bookingStatus(b.status)}</span>
             </div>
             <div className="mt-4 grid gap-3 text-sm md:grid-cols-3">
               <p><b>Ngày đi:</b> {b.scheduledAt ? new Date(b.scheduledAt).toLocaleString("vi-VN") : "Chưa hẹn"}</p>
-              <p><b>Số khách:</b> {b.passengerCount}</p>
+              {usesPassengerCount(b.type) ? (
+                <p><b>Số khách:</b> {b.passengerCount}</p>
+              ) : (
+                <p><b>Loại:</b> {b.type === "CARGO" ? "Gửi hàng" : "Đi chợ quê"}</p>
+              )}
               <p><b>Tổng tiền:</b> {formatMoney(b.finalTotal || b.estimatedTotal)}</p>
             </div>
           </div>

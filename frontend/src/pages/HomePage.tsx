@@ -2,12 +2,30 @@ import { Helmet } from "react-helmet-async";
 import { Link } from "react-router-dom";
 import { ArrowRight, Box, Car, ClipboardCheck, MapPinned, ShoppingBasket, Users, UserPlus } from "lucide-react";
 
-const services = [
-  { title: "Đặt xe về quê", desc: "Xe ghép, bao xe 4-7-16 chỗ", icon: Car, href: "/dat-xe" },
-  { title: "Gửi hàng", desc: "Nhận hàng 2 chiều, giao tận nơi", icon: Box, href: "/gui-hang" },
-  { title: "Đi chợ quê", desc: "Mua đồ quê, đóng gói, gửi lên phố", icon: ShoppingBasket, href: "/di-cho-que" },
-  { title: "Thuê xe hợp đồng", desc: "Đám cưới, tham quan, bệnh viện, sân bay", icon: Users, href: "/thue-xe-hop-dong" },
-];
+import { coreBookableServices } from "../routes/bookableServices";
+
+const serviceIcons: Record<string, typeof Car> = {
+  SHARED_RIDE: Car,
+  PRIVATE_RIDE: Car,
+  CARGO: Box,
+  MARKET: ShoppingBasket,
+  CONTRACT: Users,
+};
+
+const serviceDesc: Record<string, string> = {
+  SHARED_RIDE: "Gom khách theo tuyến, giá theo người",
+  PRIVATE_RIDE: "Xe riêng 4–7–16 chỗ, giá theo chuyến",
+  CARGO: "Nhận hàng 2 chiều, giao tận nơi",
+  MARKET: "Mua đồ quê, đóng gói, gửi lên phố",
+  CONTRACT: "Theo lịch trình, báo giá riêng",
+};
+
+const services = coreBookableServices.map((s) => ({
+  title: s.menuLabel,
+  desc: serviceDesc[s.type] || s.title,
+  icon: serviceIcons[s.type] || Car,
+  href: s.path,
+}));
 
 export default function HomePage() {
   return <>
@@ -18,7 +36,7 @@ export default function HomePage() {
         <div className="card bg-white text-slate-900"><div className="rounded-3xl bg-slate-100 p-6"><MapPinned className="mb-4 text-brand-700" size={42}/><h2 className="text-2xl font-bold">Tuyến đang chạy</h2><div className="mt-4 grid gap-3"><Link className="rounded-2xl bg-white p-4 font-semibold" to="/xe-sai-gon-di-duc-linh">Sài Gòn → Đức Linh</Link><Link className="rounded-2xl bg-white p-4 font-semibold" to="/xe-sai-gon-di-tanh-linh">Sài Gòn → Tánh Linh</Link><Link className="rounded-2xl bg-white p-4 font-semibold" to="/xe-duc-linh-di-sai-gon">Đức Linh → Sài Gòn</Link></div></div></div>
       </div>
     </section>
-    <section className="mx-auto max-w-7xl px-4 py-12"><div className="mb-8 flex items-end justify-between"><div><h2 className="text-3xl font-bold">Chọn dịch vụ</h2><p className="mt-2 text-slate-600">Thiết kế cho khách đặt nhanh trên điện thoại.</p></div></div><div className="grid gap-4 md:grid-cols-4">{services.map((s)=><Link key={s.title} to={s.href} className="card transition hover:-translate-y-1"><s.icon className="mb-4 text-brand-700" size={36}/><h3 className="text-lg font-bold">{s.title}</h3><p className="mt-2 text-sm text-slate-600">{s.desc}</p></Link>)}</div></section>
-    <section className="bg-white"><div className="mx-auto grid max-w-7xl gap-4 px-4 py-12 md:grid-cols-3"><div className="card"><ClipboardCheck className="text-cta"/><h3 className="mt-3 font-bold">1. Gửi yêu cầu</h3><p className="text-sm text-slate-600">Khách chọn tuyến, ngày giờ, số người/hàng.</p></div><div className="card"><ClipboardCheck className="text-cta"/><h3 className="mt-3 font-bold">2. Báo giá & xác nhận</h3><p className="text-sm text-slate-600">Hệ thống hiện giá tạm tính, admin xác nhận lại.</p></div><div className="card"><ClipboardCheck className="text-cta"/><h3 className="mt-3 font-bold">3. Điều phối chuyến</h3><p className="text-sm text-slate-600">Gom khách, gán tài xế, theo dõi công nợ rõ ràng.</p></div></div></section>
+    <section className="mx-auto max-w-7xl px-4 py-12"><div className="mb-8 flex items-end justify-between"><div><h2 className="text-3xl font-bold">Chọn dịch vụ</h2><p className="mt-2 text-slate-600">Xe ghép, bao xe, gửi hàng, đi chợ quê, hợp đồng — mỗi loại một form riêng.</p></div></div><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">{services.map((s)=><Link key={s.href} to={s.href} className="card transition hover:-translate-y-1"><s.icon className="mb-4 text-brand-700" size={36}/><h3 className="text-lg font-bold">{s.title}</h3><p className="mt-2 text-sm text-slate-600">{s.desc}</p></Link>)}</div></section>
+    <section className="bg-white"><div className="mx-auto grid max-w-7xl gap-4 px-4 py-12 md:grid-cols-3"><div className="card"><ClipboardCheck className="text-cta"/><h3 className="mt-3 font-bold">1. Gửi yêu cầu</h3><p className="text-sm text-slate-600">Khách chọn tuyến, ngày giờ, số người/hàng.</p></div><div className="card"><ClipboardCheck className="text-cta"/><h3 className="mt-3 font-bold">2. Báo giá & xác nhận</h3><p className="text-sm text-slate-600">Hệ thống hiện giá tạm tính, nhân viên xác nhận lại.</p></div><div className="card"><ClipboardCheck className="text-cta"/><h3 className="mt-3 font-bold">3. Điều phối chuyến</h3><p className="text-sm text-slate-600">Gom khách, gán tài xế, theo dõi công nợ rõ ràng.</p></div></div></section>
   </>
 }

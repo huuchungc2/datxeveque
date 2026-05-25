@@ -1,16 +1,20 @@
-import { useState } from "react";
+/**
+ * Layout công khai + sidebar dashboard.
+ *
+ * Menu accordion (mobile tiết kiệm chỗ, một nhóm mở/lần):
+ * - PublicMobileNav: Hành khách / Hàng hóa / Khác / Tài khoản.
+ * - SidebarNav + collapseGroups: admin Vận hành / Tài chính / Hệ thống.
+ * - Desktop admin: tự mở nhóm có route active.
+ *
+ * Chi tiết: frontend/GHI_CHU_LOGIC.md
+ */
+import { useCallback, useEffect, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { ChevronDown, LogOut, Menu, MessageCircle, Phone, UserPlus, X } from "lucide-react";
+import { NotificationBell } from "./NotificationBell";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { servicePages } from "../routes/serviceRoutes";
-
-const mainServices = [
-  { to: "/dat-xe", label: "Đặt xe về quê" },
-  { to: "/gui-hang", label: "Gửi hàng" },
-  { to: "/di-cho-que", label: "Đi chợ quê" },
-  { to: "/thue-xe-hop-dong", label: "Thuê xe hợp đồng" },
-];
+import { cargoNavServices, passengerNavServices } from "../routes/bookableServices";
 
 const publicLinks = [
   { to: "/tra-cuu-don", label: "Tra cứu" },
@@ -22,7 +26,58 @@ function navClass(isActive: boolean) {
   return `block rounded-xl px-3 py-2 text-sm font-semibold ${isActive ? "bg-brand-700 text-white" : "text-slate-600 hover:bg-slate-100"}`;
 }
 
-function ServicesDropdown({ onNavigate }: { onNavigate?: () => void }) {
+function CollapsibleSection({
+  title,
+  open,
+  onToggle,
+  children,
+  subdued,
+}: {
+  title: string;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+  subdued?: boolean;
+}) {
+  return (
+    <div className="border-b border-slate-100 last:border-0">
+      <button
+        type="button"
+        className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left font-semibold hover:bg-slate-50 ${
+          subdued ? "text-xs uppercase tracking-wide text-slate-400" : "text-sm text-slate-800"
+        }`}
+        onClick={onToggle}
+        aria-expanded={open}
+      >
+        {title}
+        <ChevronDown size={18} className={`shrink-0 text-slate-500 transition ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && <div className="space-y-0.5 pb-2 pl-1">{children}</div>}
+    </div>
+  );
+}
+
+function useAccordionSection(initial: string | null = null) {
+  const [openId, setOpenId] = useState<string | null>(initial);
+  const toggle = useCallback((id: string) => {
+    setOpenId((prev) => (prev === id ? null : id));
+  }, []);
+  const openOnly = useCallback((id: string | null) => {
+    setOpenId(id);
+  }, []);
+  const isOpen = useCallback((id: string) => openId === id, [openId]);
+  return { toggle, openOnly, isOpen };
+}
+
+function NavMenuDropdown({
+  label,
+  items,
+  onNavigate,
+}: {
+  label: string;
+  items: readonly { path: string; menuLabel: string }[];
+  onNavigate?: () => void;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <div className="relative" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
@@ -30,42 +85,137 @@ function ServicesDropdown({ onNavigate }: { onNavigate?: () => void }) {
         type="button"
         className="inline-flex items-center gap-1 font-semibold text-slate-700 hover:text-brand-700"
         onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-haspopup="true"
       >
-        Dịch vụ <ChevronDown size={16} className={`transition ${open ? "rotate-180" : ""}`} />
+        {label} <ChevronDown size={16} className={`transition ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-1 w-56 rounded-2xl border border-slate-200 bg-white py-2 shadow-soft">
-          {mainServices.map((s) => (
-            <Link
-              key={s.to}
-              to={s.to}
-              className="block px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              onClick={() => { setOpen(false); onNavigate?.(); }}
-            >
-              {s.label}
-            </Link>
-          ))}
-          <div className="my-1 border-t border-slate-100" />
-          {servicePages.map((s) => (
-            <Link
-              key={s.path}
-              to={s.path}
-              className="block px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
-              onClick={() => { setOpen(false); onNavigate?.(); }}
-            >
-              {s.title}
-            </Link>
-          ))}
+        <div className="absolute left-0 top-full z-50 pt-1">
+          <div className="min-w-[11rem] rounded-2xl border border-slate-200 bg-white py-2 shadow-soft">
+            {items.map((s) => (
+              <Link
+                key={s.path}
+                to={s.path}
+                className="block px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                onClick={() => {
+                  setOpen(false);
+                  onNavigate?.();
+                }}
+              >
+                {s.menuLabel}
+              </Link>
+            ))}
+          </div>
         </div>
       )}
     </div>
   );
 }
 
+function PublicMobileNav({
+  user,
+  onClose,
+  onLogout,
+}: {
+  user: ReturnType<typeof useAuth>["user"];
+  onClose: () => void;
+  onLogout: () => void;
+}) {
+  const accordion = useAccordionSection(null);
+
+  return (
+    <nav className="border-t border-slate-100 px-2 py-2 md:hidden">
+      <CollapsibleSection
+        title="Hành khách"
+        open={accordion.isOpen("passenger")}
+        onToggle={() => accordion.toggle("passenger")}
+      >
+        {passengerNavServices.map((s) => (
+          <Link
+            key={s.path}
+            to={s.path}
+            className="block rounded-xl px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            onClick={onClose}
+          >
+            {s.menuLabel}
+          </Link>
+        ))}
+      </CollapsibleSection>
+      <CollapsibleSection
+        title="Hàng hóa"
+        open={accordion.isOpen("cargo")}
+        onToggle={() => accordion.toggle("cargo")}
+      >
+        {cargoNavServices.map((s) => (
+          <Link
+            key={s.path}
+            to={s.path}
+            className="block rounded-xl px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            onClick={onClose}
+          >
+            {s.menuLabel}
+          </Link>
+        ))}
+      </CollapsibleSection>
+      <CollapsibleSection title="Khác" open={accordion.isOpen("other")} onToggle={() => accordion.toggle("other")}>
+        {publicLinks.map((l) => (
+          <Link
+            key={l.to}
+            to={l.to}
+            className="block rounded-xl px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            onClick={onClose}
+          >
+            {l.label}
+          </Link>
+        ))}
+      </CollapsibleSection>
+      <CollapsibleSection title="Tài khoản" open={accordion.isOpen("account")} onToggle={() => accordion.toggle("account")}>
+        {user ? (
+          <>
+            <Link
+              to={user.role === "ADMIN" ? "/admin" : user.role === "DRIVER" ? "/tai-xe" : "/khach"}
+              className="block rounded-xl px-3 py-2 text-sm font-semibold text-brand-700 hover:bg-slate-50"
+              onClick={onClose}
+            >
+              Trang của tôi
+            </Link>
+            <button
+              type="button"
+              className="block w-full rounded-xl px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-50"
+              onClick={() => {
+                onClose();
+                onLogout();
+              }}
+            >
+              Đăng xuất
+            </button>
+          </>
+        ) : (
+          <>
+            <Link to="/dang-nhap" className="block rounded-xl px-3 py-2 text-sm font-medium hover:bg-slate-50" onClick={onClose}>
+              Đăng nhập
+            </Link>
+            <Link to="/dang-ky?loai=khach" className="block rounded-xl px-3 py-2 text-sm font-semibold text-cta hover:bg-slate-50" onClick={onClose}>
+              Đăng ký
+            </Link>
+          </>
+        )}
+      </CollapsibleSection>
+    </nav>
+  );
+}
+
 export function PublicLayout({ children }: { children: React.ReactNode }) {
   const { user, reload } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname]);
+
   const logout = async () => {
     await api.post("/auth/logout");
     await reload();
@@ -82,7 +232,8 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
           </Link>
 
           <nav className="hidden items-center gap-5 text-sm md:flex">
-            <ServicesDropdown />
+            <NavMenuDropdown label="Hành khách" items={passengerNavServices} />
+            <NavMenuDropdown label="Hàng hóa" items={cargoNavServices} />
             {publicLinks.map((l) => (
               <NavLink
                 key={l.to}
@@ -126,58 +277,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
           </button>
         </div>
 
-        {mobileOpen && (
-          <nav className="border-t border-slate-100 px-4 py-3 md:hidden">
-            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400">Dịch vụ</p>
-            <div className="space-y-1">
-              {mainServices.map((s) => (
-                <Link key={s.to} to={s.to} className="block rounded-xl px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={() => setMobileOpen(false)}>
-                  {s.label}
-                </Link>
-              ))}
-              {servicePages.map((s) => (
-                <Link key={s.path} to={s.path} className="block rounded-xl px-3 py-2 text-sm text-slate-600 hover:bg-slate-50" onClick={() => setMobileOpen(false)}>
-                  {s.title}
-                </Link>
-              ))}
-            </div>
-            <p className="mb-2 mt-4 text-xs font-bold uppercase tracking-wide text-slate-400">Khác</p>
-            <div className="space-y-1">
-              {publicLinks.map((l) => (
-                <Link key={l.to} to={l.to} className="block rounded-xl px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={() => setMobileOpen(false)}>
-                  {l.label}
-                </Link>
-              ))}
-              {user ? (
-                <>
-                  <Link
-                    to={user.role === "ADMIN" ? "/admin" : user.role === "DRIVER" ? "/tai-xe" : "/khach"}
-                    className="block rounded-xl px-3 py-2 text-sm font-semibold text-brand-700"
-                    onClick={() => setMobileOpen(false)}
-                  >
-                    Trang của tôi
-                  </Link>
-                  <button
-                    type="button"
-                    className="block w-full rounded-xl px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-50"
-                    onClick={() => { setMobileOpen(false); logout(); }}
-                  >
-                    Đăng xuất
-                  </button>
-                </>
-              ) : (
-                <>
-                  <Link to="/dang-nhap" className="block rounded-xl px-3 py-2 text-sm font-medium" onClick={() => setMobileOpen(false)}>
-                    Đăng nhập
-                  </Link>
-                  <Link to="/dang-ky?loai=khach" className="block rounded-xl px-3 py-2 text-sm font-semibold text-cta" onClick={() => setMobileOpen(false)}>
-                    Đăng ký
-                  </Link>
-                </>
-              )}
-            </div>
-          </nav>
-        )}
+        {mobileOpen && <PublicMobileNav user={user} onClose={() => setMobileOpen(false)} onLogout={logout} />}
       </header>
 
       <main>{children}</main>
@@ -216,14 +316,17 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
 
 type NavItem = { href: string; label: string; match?: string[] };
 
+const adminNavTop: NavItem[] = [{ href: "", label: "Tổng quan" }];
+
 const adminNav: { title: string; items: NavItem[] }[] = [
   {
     title: "Vận hành",
     items: [
-      { href: "", label: "Tổng quan" },
-      { href: "/dispatch", label: "Điều phối" },
       { href: "/don-hang", label: "Đơn hàng" },
-      { href: "/dieu-phoi", label: "Chuyến xe" },
+      { href: "/dispatch", label: "Điều phối", match: ["/dispatch"] },
+      { href: "/dieu-phoi", label: "Chuyến xe", match: ["/dieu-phoi", "/chuyen-xe"] },
+      { href: "/danh-muc", label: "Tuyến & giá", match: ["/danh-muc", "/tuyen", "/gia"] },
+      { href: "/tai-xe", label: "Tài xế" },
     ],
   },
   {
@@ -236,9 +339,7 @@ const adminNav: { title: string; items: NavItem[] }[] = [
   {
     title: "Hệ thống",
     items: [
-      { href: "/danh-muc", label: "Tuyến & giá", match: ["/danh-muc", "/tuyen", "/gia"] },
       { href: "/noi-dung", label: "Nội dung web", match: ["/noi-dung", "/bai-viet", "/media"] },
-      { href: "/tai-xe", label: "Tài xế" },
       { href: "/users", label: "Người dùng" },
       { href: "/cai-dat", label: "Cài đặt" },
     ],
@@ -253,7 +354,20 @@ const driverNav: NavItem[] = [
 
 const customerNav: NavItem[] = [{ href: "", label: "Đơn của tôi" }];
 
-function SidebarNav({ prefix, groups, flat }: { prefix: string; groups?: { title: string; items: NavItem[] }[]; flat?: NavItem[] }) {
+function SidebarNav({
+  prefix,
+  groups,
+  flat,
+  onNavigate,
+  collapseGroups = false,
+}: {
+  prefix: string;
+  groups?: { title: string; items: NavItem[] }[];
+  flat?: NavItem[];
+  onNavigate?: () => void;
+  /** true = nhóm đóng mặc định, bấm mới mở (mobile) */
+  collapseGroups?: boolean;
+}) {
   const location = useLocation();
 
   const isActive = (item: NavItem) => {
@@ -262,8 +376,21 @@ function SidebarNav({ prefix, groups, flat }: { prefix: string; groups?: { title
     return item.href === "" ? location.pathname === prefix : location.pathname.startsWith(path);
   };
 
+  const activeGroupTitle = groups?.find((g) => g.items.some(isActive))?.title ?? null;
+  const { toggle, openOnly, isOpen } = useAccordionSection(collapseGroups ? null : activeGroupTitle);
+
+  useEffect(() => {
+    if (!collapseGroups && activeGroupTitle) openOnly(activeGroupTitle);
+  }, [location.pathname, collapseGroups, activeGroupTitle, openOnly]);
+
   const link = (item: NavItem) => (
-    <NavLink key={item.href + item.label} to={prefix + item.href} end={item.href === ""} className={() => navClass(isActive(item))}>
+    <NavLink
+      key={item.href + item.label}
+      to={prefix + item.href}
+      end={item.href === ""}
+      className={() => navClass(isActive(item))}
+      onClick={onNavigate}
+    >
       {item.label}
     </NavLink>
   );
@@ -271,12 +398,20 @@ function SidebarNav({ prefix, groups, flat }: { prefix: string; groups?: { title
   if (flat) return <nav className="space-y-1">{flat.map(link)}</nav>;
 
   return (
-    <nav className="space-y-5">
+    <nav className="space-y-1">
+      {adminNavTop.length > 0 && (
+        <div className="mb-2 space-y-0.5 border-b border-slate-100 pb-2">{adminNavTop.map(link)}</div>
+      )}
       {groups!.map((g) => (
-        <div key={g.title}>
-          <p className="mb-1 px-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">{g.title}</p>
-          <div className="space-y-0.5">{g.items.map(link)}</div>
-        </div>
+        <CollapsibleSection
+          key={g.title}
+          title={g.title}
+          open={isOpen(g.title)}
+          onToggle={() => toggle(g.title)}
+          subdued
+        >
+          {g.items.map(link)}
+        </CollapsibleSection>
       ))}
     </nav>
   );
@@ -285,32 +420,56 @@ function SidebarNav({ prefix, groups, flat }: { prefix: string; groups?: { title
 export function DashboardLayout({ children, type }: { children: React.ReactNode; type: "admin" | "driver" | "customer" }) {
   const title = type === "admin" ? "Quản trị" : type === "driver" ? "Tài xế" : "Khách hàng";
   const prefix = type === "admin" ? "/admin" : type === "driver" ? "/tai-xe" : "/khach";
+  const location = useLocation();
   const [mobileNav, setMobileNav] = useState(false);
 
-  const mobileSidebar =
-    type === "admin" ? <SidebarNav prefix={prefix} groups={adminNav} /> :
-    type === "driver" ? <SidebarNav prefix={prefix} flat={driverNav} /> :
-    <SidebarNav prefix={prefix} flat={customerNav} />;
+  useEffect(() => {
+    setMobileNav(false);
+  }, [location.pathname]);
+
+  const renderSidebar = (collapseGroups: boolean) => {
+    const closeMobile = collapseGroups ? () => setMobileNav(false) : undefined;
+    if (type === "admin") {
+      return <SidebarNav prefix={prefix} groups={adminNav} onNavigate={closeMobile} collapseGroups={collapseGroups} />;
+    }
+    if (type === "driver") {
+      return <SidebarNav prefix={prefix} flat={driverNav} onNavigate={closeMobile} />;
+    }
+    return <SidebarNav prefix={prefix} flat={customerNav} onNavigate={closeMobile} />;
+  };
 
   return (
     <div className="min-h-screen bg-slate-100">
-      <aside className="fixed inset-y-0 left-0 hidden w-56 border-r border-slate-200 bg-white p-4 md:block">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-56 overflow-y-auto border-r border-slate-200 bg-white p-4 md:block">
         <Link to="/" className="mb-5 flex items-center gap-2 font-bold text-brand-800">
           <img src="/brand/icon-dat-xe-ve-que.webp" alt="Đặt Xe Về Quê" className="h-9 w-9 rounded-xl object-contain" />
           <span className="text-sm">{title}</span>
         </Link>
-        {mobileSidebar}
+        {renderSidebar(false)}
       </aside>
 
       <div className="md:pl-56">
-        <header className="sticky top-0 z-20 flex items-center justify-between border-b bg-white p-4 md:hidden">
-          <b>{title}</b>
-          <button type="button" className="rounded-xl p-2 text-slate-600" onClick={() => setMobileNav((v) => !v)} aria-label="Menu">
-            {mobileNav ? <X size={22} /> : <Menu size={22} />}
-          </button>
+        <header className="sticky top-0 z-20 flex items-center justify-between gap-2 border-b bg-white px-4 py-3">
+          <b className="text-sm md:hidden">{title}</b>
+          <div className="ml-auto flex items-center gap-1">
+            {(type === "admin" || type === "driver") && <NotificationBell showOnMobile />}
+            <button
+              type="button"
+              className="rounded-xl p-2 text-slate-600 hover:bg-slate-100 md:hidden"
+              onClick={() => setMobileNav((v) => !v)}
+              aria-expanded={mobileNav}
+              aria-label={mobileNav ? "Đóng menu" : "Mở menu"}
+            >
+              {mobileNav ? <X size={22} /> : <Menu size={22} />}
+            </button>
+          </div>
         </header>
 
-        {mobileNav && <div className="border-b bg-white p-4 md:hidden">{mobileSidebar}</div>}
+        {mobileNav && (
+          <div className="max-h-[min(70vh,28rem)] overflow-y-auto border-b bg-white px-2 py-2 md:hidden">
+            {renderSidebar(true)}
+          </div>
+        )}
 
         <main className="mx-auto max-w-7xl p-4 md:p-8">{children}</main>
       </div>

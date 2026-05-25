@@ -12,6 +12,10 @@ echo Backend:  http://localhost:4002
 echo Frontend: http://localhost:5173
 echo Admin dispatch: http://localhost:5173/admin/dispatch
 echo.
+echo Dien thoai cung Wi-Fi: mo Frontend bang IP may tinh (khong dung localhost)
+echo   Vi du: http://192.168.1.10:5173  — API tu dong: http://192.168.1.10:4002/api
+echo   Neu van loi: Windows Firewall - cho phep Node/port 4002 va 5173
+echo.
 
 start "DXVQ Backend" cmd /k "cd /d %~dp0backend && npm run dev"
 timeout /t 3 /nobreak >nul

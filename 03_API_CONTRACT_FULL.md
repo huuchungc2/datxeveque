@@ -202,7 +202,7 @@ Response:
   "data": {
     "booking": {
       "id": 1,
-      "code": "DXMABC123",
+      "code": "DX-260525-A3K9",
       "status": "new"
     }
   },

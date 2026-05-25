@@ -2,6 +2,7 @@ import { Router } from "express";
 import { BookingStatus, TripStatus } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, requireRoles } from "../middleware/auth.js";
+import { completeTrip } from "../lib/tripComplete.js";
 
 export const driverRouter = Router();
 driverRouter.use(requireAuth, requireRoles(["DRIVER"]));
@@ -26,11 +27,35 @@ driverRouter.get("/jobs", async (req, res) => {
 });
 
 driverRouter.patch("/jobs/:id/status", async (req, res) => {
-  const driver = await prisma.driver.findFirst({ where: { userId: req.user!.id } });
-  const trip = await prisma.trip.findFirst({ where: { id: Number(req.params.id), driverId: driver?.id } });
-  if (!trip) return res.status(404).json({ message: "Không tìm thấy chuyến" });
-  const updated = await prisma.trip.update({ where: { id: trip.id }, data: { status: req.body.status } });
-  res.json(updated);
+  try {
+    const driver = await prisma.driver.findFirst({ where: { userId: req.user!.id } });
+    const trip = await prisma.trip.findFirst({ where: { id: Number(req.params.id), driverId: driver?.id } });
+    if (!trip) return res.status(404).json({ message: "Không tìm thấy chuyến" });
+
+    if (req.body.status === TripStatus.COMPLETED) {
+      const result = await completeTrip(trip.id, { completedBy: "DRIVER", userId: req.user?.id });
+      return res.json(result);
+    }
+
+    const updated = await prisma.trip.update({ where: { id: trip.id }, data: { status: req.body.status } });
+    res.json(updated);
+  } catch (error: any) {
+    console.error("PATCH /driver/jobs/:id/status error:", error);
+    res.status(error.statusCode || 500).json({ message: error.message || "Không cập nhật trạng thái" });
+  }
+});
+
+driverRouter.post("/jobs/:id/complete", async (req, res) => {
+  try {
+    const driver = await prisma.driver.findFirst({ where: { userId: req.user!.id } });
+    const trip = await prisma.trip.findFirst({ where: { id: Number(req.params.id), driverId: driver?.id } });
+    if (!trip) return res.status(404).json({ message: "Không tìm thấy chuyến" });
+    const result = await completeTrip(trip.id, { completedBy: "DRIVER", userId: req.user?.id });
+    res.json({ ok: true, ...result });
+  } catch (error: any) {
+    console.error("POST /driver/jobs/:id/complete error:", error);
+    res.status(error.statusCode || 500).json({ message: error.message || "Không hoàn thành chuyến" });
+  }
 });
 
 driverRouter.post("/jobs/:id/accept", async (req, res) => {

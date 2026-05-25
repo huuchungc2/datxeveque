@@ -1,5 +1,6 @@
 import { BookingType } from "@prisma/client";
 import { prisma } from "./prisma.js";
+import { usesPassengerCount } from "./bookingSeats.js";
 
 type PriceInput = {
   type: BookingType;
@@ -46,7 +47,9 @@ export async function calculatePrice(input: PriceInput) {
     return { estimatedTotal: 0, commissionAmount: 0, note: "Chưa có bảng giá, nhân viên sẽ báo giá." };
   }
 
-  const passengerCount = Math.max(1, Number(input.passengerCount || 1));
+  const passengerCount = usesPassengerCount(input.type)
+    ? Math.max(1, Number(input.passengerCount || 1))
+    : 0;
   let total = Number(rule.basePrice || 0);
 
   if (rule.pricingType === "PER_PERSON") total = Number(rule.pricePerPerson || 0) * passengerCount;

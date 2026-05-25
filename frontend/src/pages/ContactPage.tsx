@@ -25,7 +25,7 @@ export default function ContactPage() {
           {settings.email && (
             <div className="card flex items-center gap-4">
               <Mail className="text-brand-700" size={32} />
-              <div><p className="text-sm text-slate-600">Email</p><b>{settings.email}</b></div>
+              <div><p className="text-sm text-slate-600">Thư điện tử</p><b>{settings.email}</b></div>
             </div>
           )}
           {settings.business_address && (
