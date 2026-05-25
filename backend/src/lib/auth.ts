@@ -14,8 +14,8 @@ export async function hashPassword(password: string) {
 
 /** Dump/restore SQL có thể lưu admin123 dạng chữ — vẫn so khớp; lúc login sẽ tự bcrypt (xem upgradePasswordIfLegacy). */
 export async function verifyPassword(password: string, storedPassword: string) {
-  const input = String(password || "");
-  const stored = String(storedPassword || "");
+  const input = String(password || "").trim();
+  const stored = String(storedPassword || "").trim();
   if (!input || !stored) return false;
 
   if (isPasswordHashBcrypt(stored)) {

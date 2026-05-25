@@ -9,6 +9,7 @@ import { adminRouter } from "./routes/admin.js";
 import { driverRouter } from "./routes/driver.js";
 import { customerRouter } from "./routes/customer.js";
 import { notificationsRouter } from "./routes/notifications.js";
+import { setupRouter } from "./routes/setup.js";
 import { prisma } from "./lib/prisma.js";
 import { bootstrapAuthOnStartup } from "./lib/bootstrapAuth.js";
 import { apiResponseMiddleware } from "./middleware/apiResponse.js";
@@ -71,6 +72,7 @@ app.get("/api/health", async (_req, res) => {
   }
 });
 app.use("/api", apiResponseMiddleware);
+app.use("/api/setup", setupRouter);
 app.use("/api/auth", authRouter);
 app.use("/api", publicRouter);
 app.use("/api/admin", adminRouter);

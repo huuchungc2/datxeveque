@@ -190,7 +190,54 @@ Tài khoản demo (đổi mật khẩu sau khi lên production):
 
 ---
 
-## 8. Login localhost OK, VPS báo «sai mật khẩu»?
+## 8. Login VPS vẫn «sai mật khẩu» — xử lý nhanh
+
+**Bước 1 — Kiểm tra DB có admin:**
+
+```bash
+curl -s https://tenmien.vn/api/setup/status
+```
+
+Cần `"admin":{"exists":true,"status":"ACTIVE","bcrypt":true}`. Nếu `exists:false` → import lại `database/dump-dat_xe_ve_que-202605251220.sql`.
+
+**Bước 2 — PM2 phải đọc `.env` (DATABASE_URL, JWT_SECRET):**
+
+Trong `backend/.env` thêm:
+
+```env
+SETUP_SECRET=chuoi-bi-mat-cua-ban
+```
+
+```bash
+cd /var/www/dat-xe-ve-que
+git pull
+cd backend && npm run build
+pm2 delete dat-xe-ve-que-api
+pm2 start /var/www/dat-xe-ve-que/deploy/ecosystem.config.cjs
+pm2 save
+```
+
+**Bước 3 — Reset admin (chắc chắn 0900000000 / admin123):**
+
+```bash
+curl -s -X POST https://tenmien.vn/api/setup/reset-admin \
+  -H "Content-Type: application/json" \
+  -d '{"secret":"chuoi-bi-mat-cua-ban"}'
+```
+
+**Bước 4 — Test login trên server:**
+
+```bash
+curl -s -X POST http://127.0.0.1:4002/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"phone":"0900000000","password":"admin123"}'
+```
+
+Phải có `"user"`. Nếu OK mà web vẫn lỗi → build lại frontend (`VITE_API_URL=same-origin`).
+
+---
+
+## 8b. Login localhost OK, VPS báo «sai mật khẩu»? (chi tiết)
 
 | Nguyên nhân | Cách xử lý |
 |-------------|------------|

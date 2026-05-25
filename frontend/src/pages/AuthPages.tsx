@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { api } from "../lib/api";
+import { api, API_BASE } from "../lib/api";
 import { normalizeVnPhone, PHONE_INVALID_MESSAGE, phoneInputProps, sanitizePhoneInput } from "../lib/phone";
 import { useAuth } from "../lib/auth";
 
@@ -13,7 +13,15 @@ export function LoginPage() {
     e.preventDefault(); setError("");
     const p=normalizeVnPhone(phone);
     if(!p) return setError(PHONE_INVALID_MESSAGE);
-    try{const res=await api.post("/auth/login",{phone:p,password}); await reload(); nav(redirectByRole(res.data.user.role));}catch(err:any){setError(err.response?.data?.message||"Đăng nhập lỗi");}
+    try{
+      const res=await api.post("/auth/login",{phone:p,password:password.trim()});
+      await reload();
+      nav(redirectByRole(res.data.user.role));
+    }catch(err:any){
+      const msg=err.response?.data?.message||"Đăng nhập lỗi";
+      const hint=err.response?` (API: ${API_BASE})`:" — không kết nối được API";
+      setError(msg+hint);
+    }
   };
   return <div className="mx-auto max-w-md px-4 py-12"><Helmet><title>Đăng nhập | Đặt Xe Về Quê</title></Helmet><form onSubmit={submit} className="card"><h1 className="text-2xl font-bold">Đăng nhập</h1><p className="mt-2 text-sm text-slate-600">Dùng cho quản trị, tài xế và khách hàng.</p>{error&&<p className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-600">{error}</p>}<label className="mt-5 block text-sm font-semibold">Số điện thoại (10 số)</label><input className="input mt-2" {...phoneInputProps} value={phone} onChange={e=>setPhone(sanitizePhoneInput(e.target.value))}/><label className="mt-4 block text-sm font-semibold">Mật khẩu</label><input className="input mt-2" type="password" value={password} onChange={e=>setPassword(e.target.value)}/><button className="btn-primary mt-6 w-full">Đăng nhập</button><div className="mt-4 flex justify-between text-sm"><Link to="/quen-mat-khau">Quên mật khẩu?</Link><Link to="/dang-ky">Đăng ký</Link></div></form></div>
 }

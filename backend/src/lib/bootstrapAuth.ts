@@ -29,7 +29,7 @@ export async function migrateLegacyPasswordHashesOnStartup() {
   });
   let n = 0;
   for (const u of users) {
-    const stored = String(u.passwordHash || "");
+    const stored = String(u.passwordHash || "").trim();
     if (!stored || isPasswordHashBcrypt(stored)) continue;
     await prisma.user.update({
       where: { id: u.id },
