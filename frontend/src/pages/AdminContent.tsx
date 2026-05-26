@@ -30,7 +30,7 @@ export function AdminPosts() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold">Bài viết</h1>
+      <h1 className="section-title">Bài viết</h1>
       <div className="card mt-5 grid gap-3">
         <input className="input" placeholder="Tiêu đề" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
         <input className="input" placeholder="Đường dẫn bài (vd. kinh-nghiem-dat-xe)" value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} />
@@ -84,7 +84,7 @@ export function AdminMedia() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold">Thư viện ảnh</h1>
+      <h1 className="section-title">Thư viện ảnh</h1>
       <div className="card mt-5 grid gap-3 md:grid-cols-2">
         <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} />
         <input className="input" placeholder="Mô tả ảnh (bắt buộc)" value={meta.altText} onChange={(e) => setMeta({ ...meta, altText: e.target.value })} />

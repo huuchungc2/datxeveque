@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bell } from "lucide-react";
 import { api } from "../lib/api";
+import { formatDisplayDateTime } from "../lib/datetime";
 
 type NotificationRow = {
   id: number;
@@ -126,7 +127,7 @@ export function NotificationBell({ showOnMobile = true }: { showOnMobile?: boole
                   <div className="text-sm font-medium text-slate-900">{n.title}</div>
                   <div className="mt-0.5 line-clamp-2 text-xs text-slate-600">{n.body}</div>
                   <div className="mt-1 text-[10px] text-slate-400">
-                    {new Date(n.createdAt).toLocaleString("vi-VN")}
+                    {formatDisplayDateTime(n.createdAt)}
                   </div>
                 </button>
               ))}

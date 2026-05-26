@@ -68,7 +68,7 @@ export function AdminRoutes() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold">Tuyến</h1>
+      <h1 className="section-title">Tuyến</h1>
       <div className="card mt-5 grid gap-3 md:grid-cols-2">
         <p className="text-sm text-slate-600 md:col-span-2">
           {editId ? `Đang sửa tuyến #${editId}` : "Thêm tuyến mới"}
@@ -167,7 +167,7 @@ export function AdminPricing() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold">Bảng giá</h1>
+      <h1 className="section-title">Bảng giá</h1>
       <p className="mt-2 text-sm text-slate-600">
         Khai giá theo <b>loại dịch vụ</b> + <b>tuyến</b> (hoặc giá chung toàn hệ thống). Khách đặt web sẽ thấy giá tạm tính từ bảng này.
       </p>

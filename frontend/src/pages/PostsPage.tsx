@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
+import { ArrowRight, BookOpen } from "lucide-react";
 import { api } from "../lib/api";
+import { EmptyState, PageIntro } from "../components/ui/DesignKit";
 
 function sanitizeHtml(html: string) {
   return String(html || "")
@@ -13,24 +15,21 @@ function sanitizeHtml(html: string) {
 
 export function PostsPage() {
   const [posts, setPosts] = useState<any[]>([]);
-  useEffect(() => {
-    api.get("/posts").then((r) => setPosts(r.data));
-  }, []);
+  useEffect(() => { api.get("/posts").then((r) => setPosts(r.data)); }, []);
   return (
-    <div className="mx-auto max-w-7xl px-4 py-10">
-      <Helmet>
-        <title>Kinh nghiệm đi xe về quê</title>
-      </Helmet>
-      <h1 className="text-3xl font-bold">Kinh nghiệm</h1>
-      <div className="mt-6 grid gap-4 md:grid-cols-3">
+    <div className="page py-10">
+      <Helmet><title>Kinh nghiệm đi xe về quê</title></Helmet>
+      <PageIntro title="Kinh nghiệm đi xe về quê" subtitle="Bài viết hướng dẫn đặt xe, gửi hàng, chuẩn bị hành lý và các lưu ý khi đi tuyến quê." />
+      {posts.length === 0 ? <EmptyState title="Chưa có bài viết" subtitle="Khi admin đăng bài, danh sách sẽ hiển thị tại đây." icon={<BookOpen size={26} />} /> : <div className="grid gap-4 md:grid-cols-3">
         {posts.map((p) => (
-          <Link className="card" to={`/kinh-nghiem/${p.slug}`} key={p.id}>
-            <span className="badge">{p.category?.name || "Bài viết"}</span>
-            <h2 className="mt-3 text-xl font-bold">{p.title}</h2>
-            <p className="mt-2 text-sm text-slate-600">{p.excerpt}</p>
+          <Link className="card card-hover group" to={`/kinh-nghiem/${p.slug}`} key={p.id}>
+            <span className="badge badge-info">{p.category?.name || "Bài viết"}</span>
+            <h2 className="mt-4 text-xl font-extrabold group-hover:text-brand-700">{p.title}</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">{p.excerpt}</p>
+            <span className="mt-4 inline-flex items-center gap-2 text-sm font-bold text-brand-700">Xem bài viết <ArrowRight size={16} /></span>
           </Link>
         ))}
-      </div>
+      </div>}
     </div>
   );
 }
@@ -38,20 +37,18 @@ export function PostsPage() {
 export function PostDetailPage() {
   const { slug } = useParams();
   const [post, setPost] = useState<any>();
-  useEffect(() => {
-    api.get(`/posts/${slug}`).then((r) => setPost(r.data));
-  }, [slug]);
+  useEffect(() => { api.get(`/posts/${slug}`).then((r) => setPost(r.data)); }, [slug]);
   const safeContent = useMemo(() => sanitizeHtml(post?.content || ""), [post?.content]);
-  if (!post) return <div className="p-8">Đang tải...</div>;
+  if (!post) return <div className="page py-10"><EmptyState title="Đang tải bài viết" subtitle="Vui lòng chờ trong giây lát." /></div>;
   return (
-    <article className="mx-auto max-w-3xl px-4 py-10">
-      <Helmet>
-        <title>{post.seoTitle || post.title}</title>
-        <meta name="description" content={post.seoDescription || post.excerpt} />
-      </Helmet>
-      <h1 className="text-4xl font-bold">{post.title}</h1>
-      <p className="mt-3 text-slate-600">{post.excerpt}</p>
-      <div className="prose mt-8 max-w-none" dangerouslySetInnerHTML={{ __html: safeContent }} />
+    <article className="page max-w-4xl py-10">
+      <Helmet><title>{post.seoTitle || post.title}</title><meta name="description" content={post.seoDescription || post.excerpt} /></Helmet>
+      <div className="panel">
+        <span className="badge badge-info">{post.category?.name || "Bài viết"}</span>
+        <h1 className="mt-4 text-3xl font-extrabold tracking-tight md:text-5xl">{post.title}</h1>
+        <p className="mt-3 text-lg leading-8 text-slate-600">{post.excerpt}</p>
+        <div className="prose mt-8 max-w-none" dangerouslySetInnerHTML={{ __html: safeContent }} />
+      </div>
     </article>
   );
 }

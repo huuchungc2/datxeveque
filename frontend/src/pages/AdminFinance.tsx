@@ -24,7 +24,7 @@ export function AdminDebts() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold">Công nợ & đối soát</h1>
+      <h1 className="section-title">Công nợ & đối soát</h1>
       <div className="mt-5 grid gap-4 md:grid-cols-3">
         <div className="card"><p>Tài xế còn nợ văn phòng</p><b className="text-2xl text-red-600">{formatMoney(data?.totalDriverDebt)}</b></div>
         <div className="card"><p>Văn phòng còn phải trả tài xế</p><b className="text-2xl text-cta">{formatMoney(data?.totalAdminOwesDriver)}</b></div>

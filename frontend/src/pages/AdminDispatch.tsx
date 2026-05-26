@@ -4,6 +4,7 @@ import { fmtDepartureTime, toDatetimeLocalValue } from "../lib/datetime";
 import { SERVICE_TYPE_OPTIONS, serviceTypeLabel } from "../lib/serviceTypes";
 import { bookingSeatUnits, bookingCapacityLabel } from "../lib/bookingSeats";
 import { bookingStatus, tripStatus } from "../lib/vi";
+import { GregorianDateInput, GregorianDateTimeInput } from "../components/ui/GregorianDateInputs";
 
 const fmtTime = fmtDepartureTime;
 
@@ -222,7 +223,7 @@ export function AdminDispatch() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold">Điều phối chuyến</h1>
+      <h1 className="section-title">Điều phối chuyến</h1>
       <p className="mt-2 max-w-3xl text-slate-600">
         Mỗi lần gán phải khớp <b>số khách đặt</b> với <b>sức chứa xe</b> (tổng chỗ − đã gán = còn trống). Ví dụ 10 khách → cần xe 10+ chỗ hoặc <b>2 chuyến</b> (7+3).
         Điều phối viên xác nhận hoặc đổi xe/chuyến — không gán vượt ghế.
@@ -266,7 +267,7 @@ export function AdminDispatch() {
             </option>
           ))}
         </select>
-        <input className="input" type="date" onChange={(e) => setFilters({ ...filters, from: e.target.value || undefined })} />
+        <GregorianDateInput value={filters.from || ""} onChange={(value) => setFilters({ ...filters, from: value || undefined })} />
         <input className="input" placeholder="Tìm mã/SĐT/tên" onChange={(e) => setFilters({ ...filters, q: e.target.value || undefined })} />
         <input className="input" placeholder="Chiều đi" onChange={(e) => setFilters({ ...filters, direction: e.target.value || undefined })} />
         <button className="btn-secondary" onClick={load}>
@@ -484,12 +485,12 @@ export function AdminDispatch() {
                         </p>
                         {!b.scheduledAt && (
                           <div className="mt-2 flex flex-wrap items-end gap-2" onClick={(e) => e.preventDefault()}>
-                            <input
-                              className="input py-1 text-sm"
-                              type="datetime-local"
-                              value={timeEdits[b.id] ?? ""}
-                              onChange={(e) => setTimeEdits((prev) => ({ ...prev, [b.id]: e.target.value }))}
-                            />
+                            <div>
+                              <GregorianDateTimeInput
+                                value={timeEdits[b.id] ?? ""}
+                                onChange={(value) => setTimeEdits((prev) => ({ ...prev, [b.id]: value }))}
+                              />
+                            </div>
                             <button
                               type="button"
                               className="btn-primary py-1 text-sm"
@@ -530,7 +531,7 @@ export function AdminDispatch() {
                       <span className="badge">{tripStatus(t.status)}</span>
                     </div>
                     <p className="mt-1 text-sm text-slate-600">{t.route?.name}</p>
-                    <p className="text-sm text-slate-600">{new Date(t.departureAt).toLocaleString("vi-VN")}</p>
+                    <p className="text-sm text-slate-600">{fmtDepartureTime(t.departureAt)}</p>
                     <p className="text-sm">
                       {t.driver?.name || "Chưa gán tài xế"} {t.vehicle?.vehicleType ? `• ${t.vehicle.vehicleType}` : ""}
                     </p>
