@@ -342,7 +342,7 @@ const adminNav: { title: string; items: NavItem[] }[] = [
   {
     title: "Vận hành",
     items: [
-      { href: "/don-hang", label: "Đơn hàng" },
+      { href: "/don-hang", label: "Đơn đặt xe" },
       { href: "/dispatch", label: "Điều phối", match: ["/dispatch"] },
       { href: "/dieu-phoi", label: "Chuyến xe", match: ["/dieu-phoi", "/chuyen-xe"] },
       { href: "/danh-muc", label: "Tuyến & giá", match: ["/danh-muc", "/tuyen", "/gia"] },
@@ -459,8 +459,8 @@ export function DashboardLayout({ children, type }: { children: React.ReactNode;
   };
 
   return (
-    <div className="min-h-screen bg-slate-100">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-56 overflow-y-auto border-r border-slate-200 bg-white p-4 md:block">
+    <div className="min-h-screen app-shell-bg">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 overflow-y-auto border-r border-slate-200 bg-white/95 p-4 shadow-card backdrop-blur md:block">
         <Link to="/" className="mb-5 flex items-center gap-2 font-bold text-brand-800">
           <img src="/brand/icon-dat-xe-ve-que.webp" alt="Đặt Xe Về Quê" className="h-9 w-9 rounded-xl object-contain" />
           <span className="text-sm">{title}</span>
@@ -468,8 +468,8 @@ export function DashboardLayout({ children, type }: { children: React.ReactNode;
         {renderSidebar(false)}
       </aside>
 
-      <div className="md:pl-56">
-        <header className="sticky top-0 z-20 flex items-center justify-between gap-2 border-b bg-white px-4 py-3">
+      <div className="md:pl-60">
+        <header className="sticky top-0 z-20 flex items-center justify-between gap-2 border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur">
           <b className="text-sm md:hidden">{title}</b>
           <div className="ml-auto flex items-center gap-1">
             {(type === "admin" || type === "driver") && <NotificationBell showOnMobile />}

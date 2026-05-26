@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { api, formatMoney } from "../lib/api";
-import { defaultDepartureLocal, fmtDepartureTime, toDatetimeLocalValue } from "../lib/datetime";
+import { defaultDepartureLocal, fmtDepartureTime, formatDisplayDate, toDatetimeLocalValue } from "../lib/datetime";
 import { ROUTE_REQUIRED_SERVICE_TYPES } from "../routes/bookableServices";
 import { usesPassengerCount } from "../lib/bookingSeats";
 import { useSiteSettings } from "../lib/useSiteSettings";
 import { normalizeVnPhone, PHONE_INVALID_MESSAGE, phoneInputProps, sanitizePhoneInput } from "../lib/phone";
 import { SERVICE_TYPE_OPTIONS } from "../lib/serviceTypes";
+import { DriverDebtChart, OccupancyChart, PageTitle, RevenueTrendChart, RouteRevenueChart, StatCard, StatusDonutChart, dashboardIcons } from "../components/ui/AdminCharts";
+import { GregorianDateInput, GregorianDateTimeInput } from "../components/ui/GregorianDateInputs";
 import {
   BOOKING_STATUS_VI,
   TRIP_STATUS_VI,
@@ -20,17 +22,70 @@ import {
 
 export function AdminDashboard() {
   const [r, setR] = useState<any>();
+  const [loading, setLoading] = useState(true);
+  const load = () => {
+    setLoading(true);
+    api
+      .get("/admin/reports/overview")
+      .then((x) => setR(x.data))
+      .finally(() => setLoading(false));
+  };
   useEffect(() => {
-    api.get("/admin/reports/overview").then((x) => setR(x.data));
+    load();
   }, []);
+  const trips = r?.trips || [];
+  const today = formatDisplayDate(new Date());
   return (
-    <div>
-      <h1 className="text-3xl font-bold">Tổng quan</h1>
-      <div className="mt-6 grid gap-4 md:grid-cols-4">
-        <div className="card"><p>Doanh thu</p><b className="text-2xl">{formatMoney(r?.totalRevenue)}</b></div>
-        <div className="card"><p>Hoa hồng</p><b className="text-2xl text-cta">{formatMoney(r?.totalCommission)}</b></div>
-        <div className="card"><p>Tài xế còn lại</p><b className="text-2xl">{formatMoney(r?.totalDriverNet)}</b></div>
-        <div className="card"><p>Công nợ tài xế</p><b className="text-2xl text-red-600">{formatMoney(r?.totalDriverDebt)}</b></div>
+    <div className="space-y-6">
+      <PageTitle
+        title="Tổng quan vận hành"
+        subtitle={`Dashboard mới theo design system Be Vietnam Pro, teal + cam CTA. Dữ liệu đang lấy trực tiếp từ báo cáo chuyến xe, cập nhật ngày ${today}.`}
+      />
+
+      {loading && <div className="card text-sm font-semibold text-ink-500">Đang tải dữ liệu vận hành...</div>}
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <StatCard label="Tổng doanh thu" value={formatMoney(r?.totalRevenue)} tone="brand" icon={<dashboardIcons.Banknote size={20} />} hint="Khách trả theo các chuyến đã ghi nhận" />
+        <StatCard label="Hoa hồng admin" value={formatMoney(r?.totalCommission)} tone="orange" icon={<dashboardIcons.CheckCircle2 size={20} />} hint="Phần văn phòng được hưởng" />
+        <StatCard label="Công nợ tài xế" value={formatMoney(r?.totalDriverDebt)} tone="red" icon={<dashboardIcons.AlertTriangle size={20} />} hint="Tài xế cần nộp văn phòng" />
+        <StatCard label="Tổng chuyến" value={r?.totalTrips || 0} tone="blue" icon={<dashboardIcons.Car size={20} />} hint="Theo bộ lọc báo cáo hiện tại" />
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-3">
+        <RevenueTrendChart trips={trips} />
+        <StatusDonutChart trips={trips} />
+        <RouteRevenueChart trips={trips} />
+        <DriverDebtChart trips={trips} />
+        <OccupancyChart trips={trips} />
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        <div className="card">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-lg font-extrabold text-ink-900">Chuyến mới nhất</h2>
+            <span className="badge badge-info">{trips.length} chuyến</span>
+          </div>
+          <div className="mt-4 divide-y divide-slate-100">
+            {trips.slice(0, 6).map((t: any) => (
+              <div key={t.id} className="flex items-center justify-between gap-4 py-3">
+                <div className="min-w-0">
+                  <b className="block truncate text-sm text-ink-900">{t.code} • {t.route?.name || "Chưa rõ tuyến"}</b>
+                  <p className="text-xs text-ink-500">{fmtDepartureTime(t.departureAt)} • {t.driver?.name || "Chưa gán tài xế"}</p>
+                </div>
+                <div className="text-right text-sm font-extrabold text-brand-700">{formatMoney(t.totalCustomerAmount)}</div>
+              </div>
+            ))}
+            {!trips.length && <p className="py-5 text-sm text-ink-500">Chưa có chuyến để hiển thị.</p>}
+          </div>
+        </div>
+        <div className="card bg-gradient-to-br from-brand-700 to-brand-900 text-white">
+          <h2 className="text-lg font-extrabold">Gợi ý vận hành hôm nay</h2>
+          <div className="mt-4 grid gap-3">
+            <div className="rounded-3xl bg-white/10 p-4"><b>1. Ưu tiên điều phối đơn chờ</b><p className="mt-1 text-sm text-white/75">Vào mục Điều phối để gom đơn theo tuyến, tránh xe chạy thiếu ghế.</p></div>
+            <div className="rounded-3xl bg-white/10 p-4"><b>2. Kiểm tra công nợ lớn</b><p className="mt-1 text-sm text-white/75">Chart công nợ giúp biết tài xế nào cần đối soát trước.</p></div>
+            <div className="rounded-3xl bg-white/10 p-4"><b>3. Theo dõi tuyến có doanh thu cao</b><p className="mt-1 text-sm text-white/75">Tăng xe cho tuyến đang có nhu cầu tốt trong 7–30 ngày gần nhất.</p></div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -207,7 +262,7 @@ export function AdminBookings() {
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-3xl font-bold">Đơn hàng</h1>
+        <h1 className="section-title">Đơn đặt xe</h1>
         <button type="button" className="btn-primary py-2" onClick={() => setForm(emptyBookingForm())}>
           + Thêm đơn
         </button>
@@ -231,7 +286,7 @@ export function AdminBookings() {
             </option>
           ))}
         </select>
-        <input className="input" type="date" onChange={(e) => setFilters({ ...filters, from: e.target.value })} />
+        <GregorianDateInput value={filters.from || ""} onChange={(value) => setFilters({ ...filters, from: value })} />
         <button className="btn-secondary" onClick={load}>Lọc</button>
       </div>
       <div className="mt-5 grid gap-4 lg:grid-cols-2">
@@ -304,11 +359,10 @@ export function AdminBookings() {
             </label>
             <label className="text-sm font-semibold sm:col-span-2">
               Ngày giờ đi *
-              <input
-                className="input mt-1"
-                type="datetime-local"
+              <GregorianDateTimeInput
+                className="mt-1"
                 value={form.scheduledAtLocal}
-                onChange={(e) => setForm({ ...form, scheduledAtLocal: e.target.value })}
+                onChange={(value) => setForm({ ...form, scheduledAtLocal: value })}
               />
             </label>
             <label className="text-sm font-semibold">
@@ -606,7 +660,7 @@ export function AdminUsers() {
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-3xl font-bold">Quản lý người dùng</h1>
+        <h1 className="section-title">Quản lý người dùng</h1>
         <button type="button" className="btn-primary" onClick={startCreate}>
           + Thêm người dùng
         </button>
@@ -926,7 +980,7 @@ export function AdminDrivers() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold">Tài xế</h1>
+      <h1 className="section-title">Tài xế</h1>
       {editId && (
         <div className="card mt-5 grid gap-3 md:grid-cols-2">
           <p className="text-sm text-slate-600 md:col-span-2">Đang sửa tài xế #{editId}</p>
@@ -1030,13 +1084,13 @@ export function AdminTrips() {
   };
   return (
     <div>
-      <h1 className="text-3xl font-bold">Danh sách chuyến</h1>
+      <h1 className="section-title">Danh sách chuyến</h1>
       <p className="mt-2 text-sm text-slate-600">Gom và gán khách tại menu <b>Điều phối</b> (3 cột).</p>
       <div className="mt-5 grid gap-3">
         {items.map((t) => (
           <div className="card" key={t.id}>
             <div className="flex justify-between gap-3">
-              <div><b>{t.code} - {t.route?.name}</b><p className="text-sm text-slate-600">{new Date(t.departureAt).toLocaleString("vi-VN")} • {t.driver?.name || "Chưa gán tài xế"}</p></div>
+              <div><b>{t.code} - {t.route?.name}</b><p className="text-sm text-slate-600">{fmtDepartureTime(t.departureAt)} • {t.driver?.name || "Chưa gán tài xế"}</p></div>
               <select className="input w-auto py-1 text-sm" value={t.status} onChange={(e) => setStatus(t.id, e.target.value)}>
                 {Object.entries(TRIP_STATUS_VI).map(([k, v]) => (
                   <option key={k} value={k}>
@@ -1067,30 +1121,36 @@ export function AdminReports() {
     load();
     api.get("/admin/routes").then((x) => setRoutes(x.data));
   }, []);
+  const trips = r?.trips || [];
   return (
-    <div>
-      <h1 className="text-3xl font-bold">Báo cáo doanh thu & hoa hồng</h1>
-      <div className="card mt-5 grid gap-3 md:grid-cols-6">
-        <input className="input" type="date" onChange={(e) => setF({ ...f, from: e.target.value })} />
-        <input className="input" type="date" onChange={(e) => setF({ ...f, to: e.target.value })} />
+    <div className="space-y-6">
+      <PageTitle title="Báo cáo doanh thu & hoa hồng" subtitle="Bộ lọc báo cáo, chart doanh thu, top tuyến và công nợ tài xế theo cùng một chuẩn thiết kế." />
+      <div className="card grid gap-3 md:grid-cols-6">
+        <GregorianDateInput value={f.from || ""} onChange={(value) => setF({ ...f, from: value })} />
+        <GregorianDateInput value={f.to || ""} onChange={(value) => setF({ ...f, to: value })} />
         <input className="input" placeholder="Mã tài xế" onChange={(e) => setF({ ...f, driverId: e.target.value })} />
         <select className="input" onChange={(e) => setF({ ...f, routeId: e.target.value })}><option value="">Tất cả tuyến</option>{routes.map((rt) => <option key={rt.id} value={rt.id}>{rt.name}</option>)}</select>
         <select className="input" onChange={(e) => setF({ ...f, serviceType: e.target.value || undefined })}>
           <option value="">Dịch vụ</option>
           {SERVICE_TYPE_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
+            <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
         <button className="btn-secondary" onClick={load}>Lọc báo cáo</button>
       </div>
-      <div className="mt-5 grid gap-4 md:grid-cols-5">
-        <div className="card"><p>Tổng chuyến</p><b className="text-2xl">{r?.totalTrips}</b></div>
-        <div className="card"><p>Doanh thu</p><b>{formatMoney(r?.totalRevenue)}</b></div>
-        <div className="card"><p>Hoa hồng</p><b>{formatMoney(r?.totalCommission)}</b></div>
-        <div className="card"><p>Tài xế nợ văn phòng</p><b className="text-red-600">{formatMoney(r?.totalDriverDebt)}</b></div>
-        <div className="card"><p>Văn phòng trả tài xế</p><b className="text-cta">{formatMoney(r?.totalAdminOwesDriver)}</b></div>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <StatCard label="Tổng chuyến" value={r?.totalTrips || 0} tone="blue" icon={<dashboardIcons.Car size={20} />} />
+        <StatCard label="Doanh thu" value={formatMoney(r?.totalRevenue)} tone="brand" icon={<dashboardIcons.Banknote size={20} />} />
+        <StatCard label="Hoa hồng" value={formatMoney(r?.totalCommission)} tone="orange" icon={<dashboardIcons.CheckCircle2 size={20} />} />
+        <StatCard label="Tài xế nợ VP" value={formatMoney(r?.totalDriverDebt)} tone="red" icon={<dashboardIcons.AlertTriangle size={20} />} />
+        <StatCard label="VP trả tài xế" value={formatMoney(r?.totalAdminOwesDriver)} tone="green" icon={<dashboardIcons.Users size={20} />} />
+      </div>
+      <div className="grid gap-5 xl:grid-cols-3">
+        <RevenueTrendChart trips={trips} />
+        <StatusDonutChart trips={trips} />
+        <RouteRevenueChart trips={trips} />
+        <DriverDebtChart trips={trips} />
+        <OccupancyChart trips={trips} />
       </div>
     </div>
   );
@@ -1110,7 +1170,7 @@ export function AdminSettings() {
   };
   return (
     <div>
-      <h1 className="text-3xl font-bold">Cài đặt website</h1>
+      <h1 className="section-title">Cài đặt website</h1>
       <div className="card mt-5 grid gap-4 md:grid-cols-2">
         {rows.map((r, i) => (
           <label key={r.key} className="block text-sm font-semibold">
