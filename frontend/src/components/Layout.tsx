@@ -10,13 +10,14 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { ChevronDown, LogOut, Menu, MessageCircle, Phone, UserPlus, X } from "lucide-react";
+import { ChevronDown, LogOut, Menu, MessageCircle, Phone, UserCircle, UserPlus, X } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { getContactInfo, useSiteSettings } from "../lib/useSiteSettings";
 import { ContactQuickBlock } from "./ContactQuickBlock";
 import { cargoNavServices, passengerNavServices } from "../routes/bookableServices";
+import { accountPath, dashboardPath } from "../lib/accountPath";
 
 const publicLinks = [
   { to: "/tra-cuu-don", label: "Tra cứu" },
@@ -26,6 +27,78 @@ const publicLinks = [
 
 function navClass(isActive: boolean) {
   return `block rounded-xl px-3 py-2 text-sm font-semibold ${isActive ? "bg-brand-700 text-white" : "text-slate-600 hover:bg-slate-100"}`;
+}
+
+/** Menu tên user — tài khoản & đăng xuất, không nằm trong menu nghiệp vụ. */
+function AccountUserMenu({
+  variant = "public",
+  onNavigate,
+}: {
+  variant?: "public" | "dashboard";
+  onNavigate?: () => void;
+}) {
+  const { user, logout } = useAuth();
+  const [open, setOpen] = useState(false);
+
+  if (!user) return null;
+
+  const close = () => {
+    setOpen(false);
+    onNavigate?.();
+  };
+
+  const handleLogout = async () => {
+    close();
+    await logout();
+  };
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        className="inline-flex max-w-[11rem] items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 sm:max-w-[14rem]"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+      >
+        <UserCircle size={18} className="shrink-0 text-brand-700" />
+        <span className="truncate">{user.name}</span>
+        <ChevronDown size={14} className={`shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <>
+          <button type="button" className="fixed inset-0 z-40 cursor-default" aria-label="Đóng menu" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full z-50 mt-1 min-w-[13rem] overflow-hidden rounded-2xl border border-slate-200 bg-white py-1 shadow-soft">
+            <p className="border-b border-slate-100 px-4 py-2 text-xs text-slate-500">{user.phone}</p>
+            {variant === "public" && (
+              <Link
+                to={dashboardPath(user.role)}
+                className="block px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                onClick={close}
+              >
+                Trang quản lý
+              </Link>
+            )}
+            <Link
+              to={accountPath(user.role)}
+              className="block px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              onClick={close}
+            >
+              Thông tin tài khoản
+            </Link>
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-medium text-red-600 hover:bg-red-50"
+              onClick={handleLogout}
+            >
+              <LogOut size={16} />
+              Đăng xuất
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
 
 function CollapsibleSection({
@@ -176,11 +249,18 @@ function PublicMobileNav({
         {user ? (
           <>
             <Link
-              to={user.role === "ADMIN" ? "/admin" : user.role === "DRIVER" ? "/tai-xe" : "/khach"}
+              to={dashboardPath(user.role)}
               className="block rounded-xl px-3 py-2 text-sm font-semibold text-brand-700 hover:bg-slate-50"
               onClick={onClose}
             >
-              Trang của tôi
+              Trang quản lý
+            </Link>
+            <Link
+              to={accountPath(user.role)}
+              className="block rounded-xl px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              onClick={onClose}
+            >
+              Thông tin tài khoản
             </Link>
             <button
               type="button"
@@ -251,14 +331,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
 
           <div className="hidden items-center gap-2 md:flex">
             {user ? (
-              <>
-                <Link className="btn-secondary py-2" to={user.role === "ADMIN" ? "/admin" : user.role === "DRIVER" ? "/tai-xe" : "/khach"}>
-                  Trang của tôi
-                </Link>
-                <button type="button" onClick={logout} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100" aria-label="Đăng xuất">
-                  <LogOut size={20} />
-                </button>
-              </>
+              <AccountUserMenu variant="public" />
             ) : (
               <>
                 <Link to="/dang-nhap" className="rounded-2xl px-4 py-2 font-semibold text-slate-700 hover:bg-slate-100">
@@ -311,7 +384,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
         </div>
       </footer>
 
-      <div className="fixed bottom-0 left-0 right-0 z-50 grid grid-cols-3 gap-2 border-t border-slate-200 bg-white p-2 md:hidden">
+      <div className="fixed bottom-0 left-0 right-0 z-50 grid grid-cols-2 gap-2 border-t border-slate-200 bg-white p-2 md:hidden">
         {contact.ready ? (
           <>
             <a className="btn-secondary py-3" href={`tel:${contact.hotline}`}>
@@ -326,9 +399,6 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
             <Phone size={18} /> Liên hệ
           </a>
         )}
-        <Link className="btn-primary py-3" to="/dat-xe">
-          Đặt xe
-        </Link>
       </div>
     </div>
   );
@@ -367,9 +437,11 @@ const adminNav: { title: string; items: NavItem[] }[] = [
 ];
 
 const driverNav: NavItem[] = [
-  { href: "", label: "Chuyến của tôi" },
+  { href: "", label: "Việc cần làm" },
+  { href: "/chuyen", label: "Chuyến của tôi", match: ["/chuyen"] },
+  { href: "/san-sang", label: "Báo rảnh / bận" },
+  { href: "/thong-bao", label: "Thông báo" },
   { href: "/cong-no", label: "Công nợ" },
-  { href: "/san-sang", label: "Báo rảnh" },
 ];
 
 const customerNav: NavItem[] = [{ href: "", label: "Đơn của tôi" }];
@@ -442,6 +514,8 @@ export function DashboardLayout({ children, type }: { children: React.ReactNode;
   const prefix = type === "admin" ? "/admin" : type === "driver" ? "/tai-xe" : "/khach";
   const location = useLocation();
   const [mobileNav, setMobileNav] = useState(false);
+  const { user } = useAuth();
+  const onAccountPage = location.pathname === prefix + "/tai-khoan";
 
   useEffect(() => {
     setMobileNav(false);
@@ -460,19 +534,38 @@ export function DashboardLayout({ children, type }: { children: React.ReactNode;
 
   return (
     <div className="min-h-screen app-shell-bg">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 overflow-y-auto border-r border-slate-200 bg-white/95 p-4 shadow-card backdrop-blur md:block">
-        <Link to="/" className="mb-5 flex items-center gap-2 font-bold text-brand-800">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-slate-200 bg-white/95 p-4 shadow-card backdrop-blur md:flex">
+        <Link to="/" className="mb-5 flex shrink-0 items-center gap-2 font-bold text-brand-800">
           <img src="/brand/icon-dat-xe-ve-que.webp" alt="Đặt Xe Về Quê" className="h-9 w-9 rounded-xl object-contain" />
           <span className="text-sm">{title}</span>
         </Link>
-        {renderSidebar(false)}
+        <div className="min-h-0 flex-1 overflow-y-auto">{renderSidebar(false)}</div>
+        {user && (
+          <div className="mt-3 shrink-0 border-t border-slate-100 pt-3">
+            <p className="truncate px-1 text-xs font-semibold text-slate-800">{user.name}</p>
+            <p className="truncate px-1 text-xs text-slate-500">{user.phone}</p>
+            <NavLink
+              to={prefix + "/tai-khoan"}
+              className={() =>
+                `mt-2 block rounded-xl px-3 py-2 text-sm font-semibold ${
+                  onAccountPage ? "bg-brand-700 text-white" : "text-slate-600 hover:bg-slate-100"
+                }`
+              }
+            >
+              Thông tin tài khoản
+            </NavLink>
+          </div>
+        )}
       </aside>
 
       <div className="md:pl-60">
         <header className="sticky top-0 z-20 flex items-center justify-between gap-2 border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur">
           <b className="text-sm md:hidden">{title}</b>
-          <div className="ml-auto flex items-center gap-1">
+          <div className="ml-auto flex items-center gap-2">
             {(type === "admin" || type === "driver") && <NotificationBell showOnMobile />}
+            <div className="hidden sm:block">
+              <AccountUserMenu variant="dashboard" />
+            </div>
             <button
               type="button"
               className="rounded-xl p-2 text-slate-600 hover:bg-slate-100 md:hidden"
@@ -488,6 +581,17 @@ export function DashboardLayout({ children, type }: { children: React.ReactNode;
         {mobileNav && (
           <div className="max-h-[min(70vh,28rem)] overflow-y-auto border-b bg-white px-2 py-2 md:hidden">
             {renderSidebar(true)}
+            {user && (
+              <div className="mt-2 border-t border-slate-100 pt-2">
+                <NavLink
+                  to={prefix + "/tai-khoan"}
+                  className={() => navClass(location.pathname === prefix + "/tai-khoan")}
+                  onClick={() => setMobileNav(false)}
+                >
+                  Thông tin tài khoản
+                </NavLink>
+              </div>
+            )}
           </div>
         )}
 

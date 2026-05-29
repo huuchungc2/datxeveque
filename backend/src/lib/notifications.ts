@@ -1,6 +1,8 @@
 import { NotificationType, UserRole } from "@prisma/client";
 import { prisma } from "./prisma.js";
 import { bookingCapacityLabel } from "./bookingSeats.js";
+import { mirrorInAppNotification } from "./telegramNotify.js";
+import { formatZonedDateTime } from "./datetime.js";
 
 const STAFF_ROLES: UserRole[] = [UserRole.ADMIN, UserRole.DISPATCHER, UserRole.ACCOUNTANT];
 
@@ -17,13 +19,7 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 function fmtWhen(d?: Date | string | null) {
-  if (!d) return "chưa hẹn giờ";
-  return new Date(d).toLocaleString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatZonedDateTime(d);
 }
 
 async function staffUserIds() {
@@ -34,6 +30,10 @@ async function staffUserIds() {
   return users.map((u) => u.id);
 }
 
+/**
+ * Tạo thông báo chuông + mirror sang nhóm Telegram (nếu đã cấu hình bot).
+ * Mọi sự kiện phải đi qua đây để Telegram và chuông luôn khớp nhau.
+ */
 async function createForUsers(
   userIds: number[],
   data: {
@@ -49,6 +49,11 @@ async function createForUsers(
   if (!ids.length) return;
   await prisma.notification.createMany({
     data: ids.map((userId) => ({ userId, ...data })),
+  });
+  await mirrorInAppNotification({
+    title: data.title,
+    body: data.body,
+    link: data.link,
   });
 }
 
@@ -75,11 +80,38 @@ export async function notifyStaffNewBooking(booking: {
   const typeLabel = TYPE_LABELS[booking.type] || booking.type;
   const routeName = booking.route?.name || "Chưa chọn tuyến";
   const via = booking.source === "ADMIN" ? " (nhập bởi admin)" : "";
+  const body = `${booking.customerName} • ${booking.customerPhone} • ${typeLabel} • ${routeName} • ${bookingCapacityLabel(booking)} • ${fmtWhen(booking.scheduledAt)}${via}`;
   await createForUsers(await staffUserIds(), {
     type: NotificationType.BOOKING_NEW,
     title: `Đơn mới ${booking.code}`,
-    body: `${booking.customerName} • ${booking.customerPhone} • ${typeLabel} • ${routeName} • ${bookingCapacityLabel(booking)} • ${fmtWhen(booking.scheduledAt)}${via}`,
-    link: "/admin/don-hang",
+    body,
+    link: "/don-hang",
+    entityType: "booking",
+    entityId: booking.id,
+  });
+}
+
+export async function notifyStaffBookingRequest(
+  booking: {
+    id: number;
+    code: string;
+    customerName: string;
+    customerPhone: string;
+    type: string;
+    passengerCount: number;
+    scheduledAt?: Date | null;
+    route?: { name?: string } | null;
+  },
+  kind: "change" | "cancel",
+  detail: string
+) {
+  const label = kind === "cancel" ? "Yêu cầu hủy" : "Yêu cầu sửa";
+  const body = `${booking.customerName} • ${booking.customerPhone} • ${detail}`;
+  await createForUsers(await staffUserIds(), {
+    type: NotificationType.BOOKING_NEW,
+    title: `${label} — ${booking.code}`,
+    body,
+    link: "/don-hang",
     entityType: "booking",
     entityId: booking.id,
   });
@@ -105,11 +137,12 @@ export async function notifyDispatchAssigned(input: {
   const when = fmtWhen(input.departureAt);
   const route = input.routeName || "";
 
+  const dispatchBody = `Đơn: ${codes}${route ? ` • ${route}` : ""} • Khởi hành: ${when}`;
   await createForUsers(await staffUserIds(), {
     type: NotificationType.DISPATCH_ASSIGNED,
     title: `Đã gán ${count} đơn vào ${input.tripCode}`,
-    body: `Đơn: ${codes}${route ? ` • ${route}` : ""} • Khởi hành: ${when}`,
-    link: "/admin/dispatch",
+    body: dispatchBody,
+    link: "/dispatch",
     entityType: "trip",
     entityId: input.tripId,
   });
@@ -146,11 +179,12 @@ export async function notifyDriverTripAssigned(
   const when = fmtWhen(input.departureAt);
   const route = input.routeName || "";
   const action = input.isNewTrip ? "Chuyến mới được tạo" : "Được gán thêm khách";
+  const driverName = driver.name ? ` • Tài xế: ${driver.name}` : "";
 
   await createForUsers([driver.userId], {
     type: NotificationType.DRIVER_TRIP_ASSIGNED,
     title: `${action}: ${input.tripCode}`,
-    body: `${input.bookingCount} khách${route ? ` • ${route}` : ""} • Khởi hành: ${when}`,
+    body: `${input.bookingCount} khách${route ? ` • ${route}` : ""} • Khởi hành: ${when}${driverName}`,
     link: "/tai-xe",
     entityType: "trip",
     entityId: input.tripId,

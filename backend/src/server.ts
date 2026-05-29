@@ -11,6 +11,7 @@ import { customerRouter } from "./routes/customer.js";
 import { notificationsRouter } from "./routes/notifications.js";
 import { setupRouter } from "./routes/setup.js";
 import { prisma } from "./lib/prisma.js";
+import { publicRouteWhere } from "./lib/routes.js";
 import { bootstrapAuthOnStartup } from "./lib/bootstrapAuth.js";
 import { apiResponseMiddleware } from "./middleware/apiResponse.js";
 
@@ -86,7 +87,7 @@ app.get("/robots.txt", (_req, res) => {
 
 app.get("/sitemap.xml", async (_req, res) => {
   const base = process.env.PUBLIC_SITE_URL || "http://localhost:5173";
-  const routes = await prisma.route.findMany();
+  const routes = await prisma.route.findMany({ where: publicRouteWhere() });
   const posts = await prisma.post.findMany({ where: { status: "PUBLISHED" } });
   const urls = ["", "dat-xe", "gui-hang", "di-cho-que", "thue-xe-hop-dong", "xe-dam-cuoi", "xe-tham-quan", "xe-di-benh-vien", "xe-san-bay", "kinh-nghiem", "tra-cuu-don", "lien-he", ...routes.map((r) => r.slug), ...posts.map((p) => `kinh-nghiem/${p.slug}`)];
   res.type("application/xml").send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls.map((u) => `<url><loc>${base}/${u}</loc></url>`).join("")}</urlset>`);

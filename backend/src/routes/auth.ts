@@ -11,6 +11,7 @@ import {
 import { findUserByPhone } from "../lib/bootstrapAuth.js";
 import { requireAuth } from "../middleware/auth.js";
 import { assertVnPhone, PHONE_INVALID_MESSAGE } from "../lib/phone.js";
+import { changeUserPassword, getUserProfile, updateUserProfile } from "../lib/userProfile.js";
 
 export const authRouter = Router();
 
@@ -63,13 +64,63 @@ authRouter.post("/register", async (req, res) => {
       await prisma.vehicle.create({ data: { driverId: driver.id, vehicleType: vehicleType || "Xe chưa cập nhật", licensePlate: licensePlate || null, seats: Number(seats || 0) } });
     }
   }
-  else await prisma.customer.create({ data: { userId: user.id, name: cleanName, phone: cleanPhone } });
+  else {
+    const existingCustomer = await prisma.customer.findFirst({ where: { phone: cleanPhone } });
+    if (existingCustomer) {
+      await prisma.customer.update({
+        where: { id: existingCustomer.id },
+        data: { userId: user.id, name: cleanName },
+      });
+    } else {
+      await prisma.customer.create({ data: { userId: user.id, name: cleanName, phone: cleanPhone } });
+    }
+  }
   const payload = { id: user.id, role: user.role, phone: user.phone, name: user.name };
   setAuthCookie(res, signToken(payload));
   res.json({ user: payload });
 });
 
 authRouter.get("/me", requireAuth, async (req, res) => res.json({ user: req.user }));
+
+authRouter.get("/profile", requireAuth, async (req, res) => {
+  try {
+    const profile = await getUserProfile(req.user!.id);
+    if (!profile) return res.status(404).json({ message: "Không tìm thấy tài khoản" });
+    res.json(profile);
+  } catch (error) {
+    console.error("GET /auth/profile error:", error);
+    res.status(500).json({ message: "Không tải được thông tin tài khoản" });
+  }
+});
+
+authRouter.patch("/profile", requireAuth, async (req, res) => {
+  try {
+    const profile = await updateUserProfile(req.user!.id, {
+      name: req.body.name,
+      phone: req.body.phone,
+      email: req.body.email,
+      address: req.body.address,
+      zaloPhone: req.body.zaloPhone,
+    });
+    if (!profile) return res.status(404).json({ message: "Không tìm thấy tài khoản" });
+    const payload = { id: profile.id, role: profile.role, phone: profile.phone, name: profile.name };
+    setAuthCookie(res, signToken(payload));
+    res.json({ message: "Đã cập nhật thông tin", profile, user: payload });
+  } catch (error: any) {
+    console.error("PATCH /auth/profile error:", error);
+    res.status(error.statusCode || 500).json({ message: error.message || "Không cập nhật được" });
+  }
+});
+
+authRouter.post("/change-password", requireAuth, async (req, res) => {
+  try {
+    await changeUserPassword(req.user!.id, req.body.currentPassword, req.body.newPassword);
+    res.json({ message: "Đã đổi mật khẩu" });
+  } catch (error: any) {
+    console.error("POST /auth/change-password error:", error);
+    res.status(error.statusCode || 500).json({ message: error.message || "Không đổi được mật khẩu" });
+  }
+});
 
 authRouter.post("/logout", (_req, res) => {
   res.clearCookie("dxvq_token");

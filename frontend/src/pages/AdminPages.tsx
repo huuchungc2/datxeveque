@@ -1,54 +1,58 @@
 import { useEffect, useState } from "react";
 import { api, formatMoney } from "../lib/api";
-import { defaultDepartureLocal, fmtDepartureTime, formatDisplayDate, toDatetimeLocalValue } from "../lib/datetime";
-import { ROUTE_REQUIRED_SERVICE_TYPES } from "../routes/bookableServices";
-import { usesPassengerCount } from "../lib/bookingSeats";
+import { fmtDepartureTime, formatDisplayDate } from "../lib/datetime";
+import { SERVICE_TYPE_OPTIONS } from "../lib/serviceTypes";
 import { useSiteSettings } from "../lib/useSiteSettings";
 import { normalizeVnPhone, PHONE_INVALID_MESSAGE, phoneInputProps, sanitizePhoneInput } from "../lib/phone";
-import { SERVICE_TYPE_OPTIONS } from "../lib/serviceTypes";
 import { DriverDebtChart, OccupancyChart, PageTitle, RevenueTrendChart, RouteRevenueChart, StatCard, StatusDonutChart, dashboardIcons } from "../components/ui/AdminCharts";
-import { GregorianDateInput, GregorianDateTimeInput } from "../components/ui/GregorianDateInputs";
+import { GregorianDateInput } from "../components/ui/GregorianDateInputs";
 import {
-  BOOKING_STATUS_VI,
-  TRIP_STATUS_VI,
   USER_ROLE_VI,
   USER_STATUS_VI,
   bookingStatus,
-  tripStatus,
   userRole,
   userStatus,
   settingKey,
 } from "../lib/vi";
 
 export function AdminDashboard() {
-  const [r, setR] = useState<any>();
+  const [dash, setDash] = useState<any>();
+  const [charts, setCharts] = useState<any>();
   const [loading, setLoading] = useState(true);
   const load = () => {
     setLoading(true);
-    api
-      .get("/admin/reports/overview")
-      .then((x) => setR(x.data))
+    Promise.all([api.get("/admin/dashboard"), api.get("/admin/reports/overview")])
+      .then(([d, r]) => {
+        setDash(d.data);
+        setCharts(r.data);
+      })
       .finally(() => setLoading(false));
   };
   useEffect(() => {
     load();
   }, []);
-  const trips = r?.trips || [];
+  const ops = dash?.operations || {};
+  const money = dash?.money || {};
+  const trips = charts?.trips || [];
   const today = formatDisplayDate(new Date());
   return (
     <div className="space-y-6">
       <PageTitle
         title="Tổng quan vận hành"
-        subtitle={`Dashboard mới theo design system Be Vietnam Pro, teal + cam CTA. Dữ liệu đang lấy trực tiếp từ báo cáo chuyến xe, cập nhật ngày ${today}.`}
+        subtitle={`Tình hình hôm nay ${today} — đơn chờ, chuyến đang gom, tài xế và tiền thu.`}
       />
 
       {loading && <div className="card text-sm font-semibold text-ink-500">Đang tải dữ liệu vận hành...</div>}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Tổng doanh thu" value={formatMoney(r?.totalRevenue)} tone="brand" icon={<dashboardIcons.Banknote size={20} />} hint="Khách trả theo các chuyến đã ghi nhận" />
-        <StatCard label="Hoa hồng admin" value={formatMoney(r?.totalCommission)} tone="orange" icon={<dashboardIcons.CheckCircle2 size={20} />} hint="Phần văn phòng được hưởng" />
-        <StatCard label="Công nợ tài xế" value={formatMoney(r?.totalDriverDebt)} tone="red" icon={<dashboardIcons.AlertTriangle size={20} />} hint="Tài xế cần nộp văn phòng" />
-        <StatCard label="Tổng chuyến" value={r?.totalTrips || 0} tone="blue" icon={<dashboardIcons.Car size={20} />} hint="Theo bộ lọc báo cáo hiện tại" />
+        <StatCard label="Đơn mới chờ xác nhận" value={ops.newAwaitingConfirm ?? 0} tone="orange" icon={<dashboardIcons.Clock size={20} />} />
+        <StatCard label="Chờ điều phối" value={ops.waitingDispatch ?? 0} tone="blue" icon={<dashboardIcons.Car size={20} />} />
+        <StatCard label="Chuyến đang gom" value={ops.collectingTrips ?? 0} tone="brand" icon={<dashboardIcons.Car size={20} />} />
+        <StatCard label="Chuyến đang chạy" value={ops.inProgressTrips ?? 0} tone="green" icon={<dashboardIcons.Users size={20} />} />
+        <StatCard label="Hoàn thành hôm nay" value={ops.completedTodayTrips ?? 0} tone="green" icon={<dashboardIcons.CheckCircle2 size={20} />} />
+        <StatCard label="Tài xế rảnh" value={ops.driversAvailable ?? 0} tone="blue" icon={<dashboardIcons.Users size={20} />} />
+        <StatCard label="Cần admin xử lý" value={ops.adminReviewBookings ?? 0} tone="red" icon={<dashboardIcons.AlertTriangle size={20} />} />
+        <StatCard label="Doanh thu hôm nay" value={formatMoney(money.revenueToday)} tone="brand" icon={<dashboardIcons.Banknote size={20} />} hint={`Khách ${formatMoney(money.passengerRevenue)} · Hàng ${formatMoney(money.cargoRevenue)}`} />
       </div>
 
       <div className="grid gap-5 xl:grid-cols-3">
@@ -62,432 +66,63 @@ export function AdminDashboard() {
       <div className="grid gap-5 lg:grid-cols-2">
         <div className="card">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="text-lg font-extrabold text-ink-900">Chuyến mới nhất</h2>
-            <span className="badge badge-info">{trips.length} chuyến</span>
+            <h2 className="text-lg font-extrabold text-ink-900">Việc cần xử lý</h2>
+            <a href="/admin/don-hang" className="text-sm font-bold text-brand-700">
+              Xem đơn →
+            </a>
           </div>
           <div className="mt-4 divide-y divide-slate-100">
-            {trips.slice(0, 6).map((t: any) => (
-              <div key={t.id} className="flex items-center justify-between gap-4 py-3">
+            {(dash?.todo?.recentBookings || []).map((b: any) => (
+              <a
+                key={b.id}
+                href={`/admin/don-hang/${b.id}`}
+                className="flex items-center justify-between gap-4 py-3 transition hover:bg-brand-50/50 -mx-2 px-2 rounded-xl"
+              >
                 <div className="min-w-0">
-                  <b className="block truncate text-sm text-ink-900">{t.code} • {t.route?.name || "Chưa rõ tuyến"}</b>
-                  <p className="text-xs text-ink-500">{fmtDepartureTime(t.departureAt)} • {t.driver?.name || "Chưa gán tài xế"}</p>
+                  <b className="block truncate text-sm text-ink-900">
+                    {b.code} • {b.customerName}
+                  </b>
+                  <p className="text-xs text-ink-500">
+                    {bookingStatus(b.status)} • {b.route?.name || "Chưa rõ tuyến"}
+                  </p>
                 </div>
-                <div className="text-right text-sm font-extrabold text-brand-700">{formatMoney(t.totalCustomerAmount)}</div>
+                <div className="text-right text-sm font-extrabold text-brand-700">{formatMoney(b.finalTotal)}</div>
+              </a>
+            ))}
+            {!dash?.todo?.recentBookings?.length && <p className="py-5 text-sm text-ink-500">Không có đơn chờ nổi bật.</p>}
+          </div>
+        </div>
+        <div className="card">
+          <h2 className="text-lg font-extrabold text-ink-900">Hành động nhanh</h2>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <a className="btn-primary py-2" href="/admin/don-hang/moi">
+              Tạo đơn mới
+            </a>
+            <a className="btn-secondary py-2" href="/admin/dispatch">
+              Điều phối
+            </a>
+            <a className="btn-secondary py-2" href="/admin/dieu-phoi">
+              Chuyến xe
+            </a>
+            <a className="btn-secondary py-2" href="/admin/tai-xe">
+              Tài xế
+            </a>
+          </div>
+          <p className="mt-4 text-sm text-slate-600">
+            Đã thu hôm nay: <b>{formatMoney(money.collected)}</b> · Chưa thu: <b>{formatMoney(money.unpaid)}</b>
+          </p>
+        </div>
+        <div className="card">
+          <h2 className="text-lg font-extrabold text-ink-900">Thông báo gần đây</h2>
+          <div className="mt-4 divide-y divide-slate-100">
+            {(dash?.todo?.recentNotifications || []).map((n: any) => (
+              <div key={n.id} className="py-3">
+                <b className="block text-sm text-ink-900">{n.title}</b>
+                <p className="mt-0.5 line-clamp-2 text-xs text-ink-500">{n.body}</p>
               </div>
             ))}
-            {!trips.length && <p className="py-5 text-sm text-ink-500">Chưa có chuyến để hiển thị.</p>}
-          </div>
-        </div>
-        <div className="card bg-gradient-to-br from-brand-700 to-brand-900 text-white">
-          <h2 className="text-lg font-extrabold">Gợi ý vận hành hôm nay</h2>
-          <div className="mt-4 grid gap-3">
-            <div className="rounded-3xl bg-white/10 p-4"><b>1. Ưu tiên điều phối đơn chờ</b><p className="mt-1 text-sm text-white/75">Vào mục Điều phối để gom đơn theo tuyến, tránh xe chạy thiếu ghế.</p></div>
-            <div className="rounded-3xl bg-white/10 p-4"><b>2. Kiểm tra công nợ lớn</b><p className="mt-1 text-sm text-white/75">Chart công nợ giúp biết tài xế nào cần đối soát trước.</p></div>
-            <div className="rounded-3xl bg-white/10 p-4"><b>3. Theo dõi tuyến có doanh thu cao</b><p className="mt-1 text-sm text-white/75">Tăng xe cho tuyến đang có nhu cầu tốt trong 7–30 ngày gần nhất.</p></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function emptyBookingForm() {
-  return {
-    id: null as number | null,
-    code: "",
-    type: "SHARED_RIDE",
-    routeId: "",
-    customerName: "",
-    customerPhone: "",
-    pickupAddress: "",
-    dropoffAddress: "",
-    direction: "",
-    scheduledAtLocal: defaultDepartureLocal(),
-    passengerCount: 1,
-    weightKg: 1,
-    vehicleType: "Xe 7 chỗ",
-    cargoDescription: "",
-    marketDescription: "",
-    note: "",
-    status: "WAITING_DISPATCH",
-    paymentReceiver: "DRIVER",
-    finalTotal: 0,
-    commissionAmount: 0,
-  };
-}
-
-function bookingToForm(b: any) {
-  const base = emptyBookingForm();
-  return {
-    ...base,
-    id: b.id,
-    code: b.code,
-    type: b.type || base.type,
-    routeId: b.routeId != null ? String(b.routeId) : "",
-    customerName: b.customerName || "",
-    customerPhone: b.customerPhone || "",
-    pickupAddress: b.pickupAddress || "",
-    dropoffAddress: b.dropoffAddress || "",
-    direction: b.direction || "",
-    scheduledAtLocal: toDatetimeLocalValue(b.scheduledAt),
-    passengerCount: usesPassengerCount(b.type) ? Number(b.passengerCount ?? 1) : 0,
-    vehicleType: b.vehicleType || "",
-    cargoDescription: b.cargoDescription || "",
-    marketDescription: b.marketDescription || "",
-    note: b.note || "",
-    status: b.status || base.status,
-    paymentReceiver: b.paymentReceiver || "DRIVER",
-    finalTotal: Number(b.finalTotal ?? 0),
-    commissionAmount: Number(b.commissionAmount ?? 0),
-  };
-}
-
-export function AdminBookings() {
-  const [items, setItems] = useState<any[]>([]);
-  const [routes, setRoutes] = useState<any[]>([]);
-  const [filters, setFilters] = useState<any>({});
-  const [form, setForm] = useState(emptyBookingForm);
-  const [priceHint, setPriceHint] = useState<any>(null);
-  const [saving, setSaving] = useState(false);
-  const isNew = form.id == null;
-
-  const load = () => api.get("/admin/bookings", { params: filters }).then((r) => setItems(r.data));
-  useEffect(() => {
-    load();
-    api.get("/admin/routes").then((r) => setRoutes(r.data));
-  }, []);
-
-  useEffect(() => {
-    if (!form.type) {
-      setPriceHint(null);
-      return;
-    }
-    if (ROUTE_REQUIRED_SERVICE_TYPES.has(form.type) && !form.routeId) {
-      setPriceHint(null);
-      return;
-    }
-    api
-      .post("/price/estimate", {
-        type: form.type,
-        routeId: form.routeId ? Number(form.routeId) : null,
-        passengerCount: usesPassengerCount(form.type) ? Number(form.passengerCount || 1) : 0,
-        weightKg: Number(form.weightKg || 0),
-        vehicleType: form.vehicleType || null,
-      })
-      .then((r) => setPriceHint(r.data))
-      .catch(() => setPriceHint(null));
-  }, [form.type, form.routeId, form.passengerCount, form.weightKg, form.vehicleType]);
-
-  const buildPayload = () => {
-    const phone = normalizeVnPhone(form.customerPhone);
-    if (!phone) throw new Error(PHONE_INVALID_MESSAGE);
-    if (!form.customerName.trim()) throw new Error("Vui lòng nhập họ tên khách");
-    if (!form.scheduledAtLocal) throw new Error("Vui lòng chọn ngày giờ đi");
-    if (ROUTE_REQUIRED_SERVICE_TYPES.has(form.type) && !form.routeId) {
-      throw new Error("Vui lòng chọn tuyến");
-    }
-    const selectedRoute = routes.find((r) => String(r.id) === String(form.routeId));
-    return {
-      customerName: form.customerName.trim(),
-      customerPhone: phone,
-      type: form.type,
-      routeId: form.routeId ? Number(form.routeId) : null,
-      direction: form.direction || selectedRoute?.direction || selectedRoute?.name || null,
-      pickupAddress: form.pickupAddress || null,
-      dropoffAddress: form.dropoffAddress || null,
-      scheduledAt: form.scheduledAtLocal,
-      passengerCount: usesPassengerCount(form.type) ? Number(form.passengerCount || 1) : 0,
-      weightKg: Number(form.weightKg || 0),
-      vehicleType: form.vehicleType || null,
-      cargoDescription: form.cargoDescription || null,
-      marketDescription: form.marketDescription || null,
-      note: form.note || null,
-      status: form.status,
-      paymentReceiver: form.paymentReceiver,
-      finalTotal: Number(form.finalTotal),
-      commissionAmount: Number(form.commissionAmount),
-    };
-  };
-
-  const saveBooking = async () => {
-    setSaving(true);
-    try {
-      const payload = buildPayload();
-      if (isNew) {
-        const r = await api.post("/admin/bookings", payload);
-        setForm(bookingToForm(r.data));
-        alert(`Đã tạo đơn ${r.data.code}`);
-      } else {
-        const r = await api.patch(`/admin/bookings/${form.id}`, payload);
-        setForm(bookingToForm(r.data));
-        alert("Đã lưu đơn");
-      }
-      load();
-    } catch (e: any) {
-      alert(e.message || e.response?.data?.message || "Không lưu được");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const recalcFromRules = async () => {
-    if (isNew) {
-      if (priceHint) {
-        setForm((f) => ({
-          ...f,
-          finalTotal: Number(priceHint.estimatedTotal || 0),
-          commissionAmount: Number(priceHint.commissionAmount || 0),
-        }));
-      }
-      return;
-    }
-    setSaving(true);
-    try {
-      const r = await api.patch(`/admin/bookings/${form.id}`, {
-        type: form.type,
-        routeId: form.routeId ? Number(form.routeId) : null,
-        passengerCount: usesPassengerCount(form.type) ? Number(form.passengerCount || 1) : 0,
-        recalcFromRules: true,
-      });
-      setForm(bookingToForm(r.data));
-      load();
-      alert("Đã tính lại từ bảng giá");
-    } catch (e: any) {
-      alert(e.response?.data?.message || "Không tính lại được");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="section-title">Đơn đặt xe</h1>
-        <button type="button" className="btn-primary py-2" onClick={() => setForm(emptyBookingForm())}>
-          + Thêm đơn
-        </button>
-      </div>
-      <div className="card mt-5 grid gap-3 md:grid-cols-5">
-        <input className="input" placeholder="Tìm tên/SĐT/mã" onChange={(e) => setFilters({ ...filters, q: e.target.value })} />
-        <select className="input" onChange={(e) => setFilters({ ...filters, type: e.target.value || undefined })}>
-          <option value="">Loại đơn</option>
-          {SERVICE_TYPE_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-        <select className="input" onChange={(e) => setFilters({ ...filters, routeId: e.target.value })}><option value="">Tuyến</option>{routes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}</select>
-        <select className="input" onChange={(e) => setFilters({ ...filters, status: e.target.value })}>
-          <option value="">Trạng thái</option>
-          {Object.entries(BOOKING_STATUS_VI).map(([k, v]) => (
-            <option key={k} value={k}>
-              {v}
-            </option>
-          ))}
-        </select>
-        <GregorianDateInput value={filters.from || ""} onChange={(value) => setFilters({ ...filters, from: value })} />
-        <button className="btn-secondary" onClick={load}>Lọc</button>
-      </div>
-      <div className="mt-5 grid gap-4 lg:grid-cols-2">
-        <div className="grid max-h-[75vh] gap-3 overflow-y-auto pr-1">
-          {items.map((b) => (
-            <button
-              type="button"
-              key={b.id}
-              className={`card text-left ${form.id === b.id ? "ring-2 ring-brand-500" : ""}`}
-              onClick={() => setForm(bookingToForm(b))}
-            >
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <b>
-                    {b.code} — {b.customerName}
-                  </b>
-                  <p className={`text-sm ${b.scheduledAt ? "text-slate-600" : "font-semibold text-amber-700"}`}>
-                    {fmtDepartureTime(b.scheduledAt)} • {b.route?.name || "Chưa chọn tuyến"}
-                  </p>
-                  <p className="text-sm text-slate-600">
-                    {b.pickupAddress || "—"} → {b.dropoffAddress || "—"}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <span className="badge">{bookingStatus(b.status)}</span>
-                  <p className="mt-2 font-bold text-cta">{formatMoney(b.finalTotal)}</p>
-                </div>
-              </div>
-            </button>
-          ))}
-          {!items.length && <p className="text-sm text-slate-500">Chưa có đơn. Bấm «Thêm đơn» để tạo.</p>}
-        </div>
-
-        <div className="card sticky top-4 max-h-[85vh] overflow-y-auto">
-          <h2 className="text-xl font-bold">{isNew ? "Thêm đơn mới" : `Sửa đơn ${form.code}`}</h2>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <label className="text-sm font-semibold sm:col-span-2">
-              Loại dịch vụ
-              <select className="input mt-1" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-                {SERVICE_TYPE_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-sm font-semibold sm:col-span-2">
-              Tuyến {ROUTE_REQUIRED_SERVICE_TYPES.has(form.type) ? "*" : "(tuỳ chọn)"}
-              <select className="input mt-1" value={form.routeId} onChange={(e) => setForm({ ...form, routeId: e.target.value })}>
-                <option value="">— Chọn tuyến —</option>
-                {routes.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-sm font-semibold">
-              Họ tên khách *
-              <input className="input mt-1" value={form.customerName} onChange={(e) => setForm({ ...form, customerName: e.target.value })} />
-            </label>
-            <label className="text-sm font-semibold">
-              SĐT (10 số) *
-              <input
-                className="input mt-1"
-                {...phoneInputProps}
-                value={form.customerPhone}
-                onChange={(e) => setForm({ ...form, customerPhone: sanitizePhoneInput(e.target.value) })}
-              />
-            </label>
-            <label className="text-sm font-semibold sm:col-span-2">
-              Ngày giờ đi *
-              <GregorianDateTimeInput
-                className="mt-1"
-                value={form.scheduledAtLocal}
-                onChange={(value) => setForm({ ...form, scheduledAtLocal: value })}
-              />
-            </label>
-            <label className="text-sm font-semibold">
-              Điểm đón / gửi
-              <input className="input mt-1" value={form.pickupAddress} onChange={(e) => setForm({ ...form, pickupAddress: e.target.value })} />
-            </label>
-            <label className="text-sm font-semibold">
-              Điểm trả / nhận
-              <input className="input mt-1" value={form.dropoffAddress} onChange={(e) => setForm({ ...form, dropoffAddress: e.target.value })} />
-            </label>
-            <label className="text-sm font-semibold">
-              Chiều / ghi chú tuyến
-              <input className="input mt-1" value={form.direction} onChange={(e) => setForm({ ...form, direction: e.target.value })} />
-            </label>
-            {usesPassengerCount(form.type) && (
-              <label className="text-sm font-semibold">
-                Số khách
-                <input
-                  className="input mt-1"
-                  type="number"
-                  min={1}
-                  value={form.passengerCount}
-                  onChange={(e) => setForm({ ...form, passengerCount: Number(e.target.value) })}
-                />
-              </label>
-            )}
-            {form.type === "CARGO" && (
-              <label className="text-sm font-semibold">
-                Khối lượng (kg)
-                <input
-                  className="input mt-1"
-                  type="number"
-                  min={1}
-                  value={form.weightKg}
-                  onChange={(e) => setForm({ ...form, weightKg: Number(e.target.value) })}
-                />
-              </label>
-            )}
-            {(form.type === "PRIVATE_RIDE" ||
-              form.type === "CONTRACT" ||
-              form.type === "WEDDING" ||
-              form.type === "TOUR" ||
-              form.type === "HOSPITAL" ||
-              form.type === "AIRPORT") && (
-              <label className="text-sm font-semibold">
-                Loại xe
-                <input className="input mt-1" value={form.vehicleType} onChange={(e) => setForm({ ...form, vehicleType: e.target.value })} />
-              </label>
-            )}
-            {form.type === "CARGO" && (
-              <label className="text-sm font-semibold sm:col-span-2">
-                Mô tả hàng
-                <textarea className="input mt-1" rows={2} value={form.cargoDescription} onChange={(e) => setForm({ ...form, cargoDescription: e.target.value })} />
-              </label>
-            )}
-            {form.type === "MARKET" && (
-              <label className="text-sm font-semibold sm:col-span-2">
-                Đồ cần mua
-                <textarea className="input mt-1" rows={2} value={form.marketDescription} onChange={(e) => setForm({ ...form, marketDescription: e.target.value })} />
-              </label>
-            )}
-            <label className="text-sm font-semibold sm:col-span-2">
-              Ghi chú
-              <textarea className="input mt-1" rows={2} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
-            </label>
-            <label className="text-sm font-semibold">
-              Trạng thái
-              <select className="input mt-1" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-                {Object.entries(BOOKING_STATUS_VI).map(([k, v]) => (
-                  <option key={k} value={k}>
-                    {v}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-sm font-semibold">
-              Ai thu tiền
-              <select className="input mt-1" value={form.paymentReceiver} onChange={(e) => setForm({ ...form, paymentReceiver: e.target.value })}>
-                <option value="DRIVER">Khách trả tài xế</option>
-                <option value="ADMIN">Khách trả văn phòng</option>
-              </select>
-            </label>
-            <label className="text-sm font-semibold">
-              Tổng tiền
-              <input
-                className="input mt-1"
-                type="number"
-                min={0}
-                value={form.finalTotal}
-                onChange={(e) => setForm({ ...form, finalTotal: Number(e.target.value) })}
-              />
-            </label>
-            <label className="text-sm font-semibold">
-              Hoa hồng
-              <input
-                className="input mt-1"
-                type="number"
-                min={0}
-                value={form.commissionAmount}
-                onChange={(e) => setForm({ ...form, commissionAmount: Number(e.target.value) })}
-              />
-            </label>
-          </div>
-          {priceHint && (
-            <p className="mt-3 rounded-xl bg-blue-50 px-3 py-2 text-sm text-brand-900">
-              Giá tạm tính: <b>{formatMoney(priceHint.estimatedTotal)}</b>
-              {priceHint.commissionAmount != null && (
-                <>
-                  {" "}
-                  — Hoa hồng: <b>{formatMoney(priceHint.commissionAmount)}</b>
-                </>
-              )}
-            </p>
-          )}
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button type="button" className="btn-primary py-2" disabled={saving} onClick={saveBooking}>
-              {isNew ? "Tạo đơn" : "Lưu thay đổi"}
-            </button>
-            <button type="button" className="btn-secondary py-2" disabled={saving} onClick={recalcFromRules}>
-              Tính lại từ bảng giá
-            </button>
-            {!isNew && (
-              <button type="button" className="btn-secondary py-2" onClick={() => setForm(emptyBookingForm())}>
-                Thêm đơn khác
-              </button>
+            {!dash?.todo?.recentNotifications?.length && (
+              <p className="py-5 text-sm text-ink-500">Chưa có thông báo — xem thêm qua icon chuông trên header.</p>
             )}
           </div>
         </div>
@@ -538,6 +173,8 @@ function userToForm(u: any) {
     vehicleSeats: Number(u.driver?.vehicles?.[0]?.seats ?? 7),
   };
 }
+
+const DRIVER_STATUS_OPTIONS = ["Rảnh", "Bận", "Đang chạy chuyến", "Nghỉ hôm nay"];
 
 export function AdminUsers() {
   const [items, setItems] = useState<any[]>([]);
@@ -900,213 +537,6 @@ export function AdminUsers() {
           </div>
         ))}
         {!items.length && <p className="text-slate-500">Chưa có người dùng phù hợp bộ lọc.</p>}
-      </div>
-    </div>
-  );
-}
-
-const DRIVER_STATUS_OPTIONS = ["Rảnh", "Bận", "Đang chạy chuyến", "Nghỉ hôm nay"];
-
-const emptyDriverForm = () => ({
-  name: "",
-  phone: "",
-  zaloPhone: "",
-  status: "Rảnh",
-  location: "",
-  direction: "",
-  seatsFree: 0,
-  note: "",
-});
-
-export function AdminDrivers() {
-  const [items, setItems] = useState<any[]>([]);
-  const [form, setForm] = useState(emptyDriverForm);
-  const [editId, setEditId] = useState<number | null>(null);
-
-  const load = () => api.get("/admin/drivers").then((r) => setItems(r.data));
-  useEffect(() => {
-    load();
-  }, []);
-
-  const resetForm = () => {
-    setForm(emptyDriverForm());
-    setEditId(null);
-  };
-
-  const startEdit = (d: any) => {
-    setEditId(d.id);
-    setForm({
-      name: d.name ?? "",
-      phone: d.phone ?? "",
-      zaloPhone: d.zaloPhone ?? "",
-      status: d.status ?? "Rảnh",
-      location: d.location ?? "",
-      direction: d.direction ?? "",
-      seatsFree: Number(d.seatsFree ?? 0),
-      note: d.note ?? "",
-    });
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  const payload = () => {
-    const phone = normalizeVnPhone(form.phone);
-    if (!phone) throw new Error(PHONE_INVALID_MESSAGE);
-    const zaloPhone = form.zaloPhone.trim() ? normalizeVnPhone(form.zaloPhone) : null;
-    if (form.zaloPhone.trim() && !zaloPhone) throw new Error("Số Zalo phải đủ 10 chữ số, bắt đầu bằng 0");
-    return {
-    name: form.name.trim(),
-    phone,
-    zaloPhone,
-    status: form.status,
-    location: form.location.trim() || null,
-    direction: form.direction.trim() || null,
-    seatsFree: Number(form.seatsFree),
-    note: form.note.trim() || null,
-  };
-  };
-
-  const save = async () => {
-    if (!editId) return;
-    if (!form.name.trim() || !form.phone.trim()) return alert("Nhập tên và số điện thoại");
-    try {
-      await api.patch(`/admin/drivers/${editId}`, payload());
-    } catch (e: any) {
-      return alert(e.message || e.response?.data?.message || "Không lưu được");
-    }
-    alert("Đã cập nhật tài xế");
-    resetForm();
-    load();
-  };
-
-  return (
-    <div>
-      <h1 className="section-title">Tài xế</h1>
-      {editId && (
-        <div className="card mt-5 grid gap-3 md:grid-cols-2">
-          <p className="text-sm text-slate-600 md:col-span-2">Đang sửa tài xế #{editId}</p>
-          <input className="input" placeholder="Họ tên" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          <input
-            className="input"
-            {...phoneInputProps}
-            value={form.phone}
-            onChange={(e) => setForm({ ...form, phone: sanitizePhoneInput(e.target.value) })}
-          />
-          <input
-            className="input"
-            type="tel"
-            inputMode="numeric"
-            maxLength={10}
-            placeholder="Zalo (10 số, tuỳ chọn)"
-            value={form.zaloPhone}
-            onChange={(e) => setForm({ ...form, zaloPhone: sanitizePhoneInput(e.target.value) })}
-          />
-          <select className="input" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-            {DRIVER_STATUS_OPTIONS.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-          <input className="input" placeholder="Vị trí hiện tại" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
-          <input className="input md:col-span-2" placeholder="Chiều nhận" value={form.direction} onChange={(e) => setForm({ ...form, direction: e.target.value })} />
-          <input
-            className="input"
-            type="number"
-            min={0}
-            placeholder="Ghế trống"
-            value={form.seatsFree}
-            onChange={(e) => setForm({ ...form, seatsFree: Number(e.target.value) })}
-          />
-          <textarea className="input md:col-span-2" rows={2} placeholder="Ghi chú nội bộ" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
-          <div className="flex flex-wrap gap-2 md:col-span-2">
-            <button className="btn-primary" onClick={save}>
-              Lưu thay đổi
-            </button>
-            <button type="button" className="btn-secondary" onClick={resetForm}>
-              Hủy sửa
-            </button>
-          </div>
-        </div>
-      )}
-      <div className="mt-5 grid gap-3 md:grid-cols-2">
-        {items.map((d) => (
-          <div className={`card ${editId === d.id ? "ring-2 ring-brand-500" : ""}`} key={d.id}>
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <b>{d.name}</b>
-                <p className="text-sm text-slate-600">
-                  {d.phone}
-                  {d.zaloPhone ? ` • Zalo ${d.zaloPhone}` : ""}
-                </p>
-                <p className="text-sm text-slate-600">
-                  {d.status} • {d.location || "Chưa cập nhật vị trí"}
-                </p>
-                {d.direction && <p className="text-sm text-slate-600">Chiều: {d.direction}</p>}
-                <p className="mt-2 text-sm">
-                  Ghế trống: <b>{d.seatsFree}</b>
-                  {d.user?.phone && (
-                    <>
-                      {" "}
-                      • Tài khoản: {d.user.phone} ({userStatus(d.user.status)})
-                    </>
-                  )}
-                </p>
-                {d.vehicles?.length > 0 && (
-                  <p className="mt-1 text-sm text-slate-500">
-                    Xe: {d.vehicles.map((v: any) => `${v.vehicleType} ${v.seats} chỗ${v.licensePlate ? ` • ${v.licensePlate}` : ""}`).join("; ")}
-                  </p>
-                )}
-                {d.note && <p className="mt-2 text-sm italic text-slate-500">{d.note}</p>}
-              </div>
-              <button type="button" className="btn-secondary shrink-0 py-2" onClick={() => startEdit(d)}>
-                Sửa
-              </button>
-            </div>
-          </div>
-        ))}
-        {!items.length && <p className="text-slate-500 md:col-span-2">Chưa có tài xế.</p>}
-      </div>
-    </div>
-  );
-}
-
-export function AdminTrips() {
-  const [items, setItems] = useState<any[]>([]);
-  const load = () => api.get("/admin/trips").then((r) => setItems(r.data));
-  useEffect(() => {
-    load();
-  }, []);
-  const setStatus = async (id: number, status: string) => {
-    if (status === "COMPLETED" && !confirm("Hoàn thành chuyến? Hệ thống chốt hoa hồng và đặt tài xế Rảnh tại điểm đến.")) return;
-    const r = await api.patch(`/admin/trips/${id}`, { status });
-    if (status === "COMPLETED" && r.data?.message) alert(r.data.message);
-    load();
-  };
-  return (
-    <div>
-      <h1 className="section-title">Danh sách chuyến</h1>
-      <p className="mt-2 text-sm text-slate-600">Gom và gán khách tại menu <b>Điều phối</b> (3 cột).</p>
-      <div className="mt-5 grid gap-3">
-        {items.map((t) => (
-          <div className="card" key={t.id}>
-            <div className="flex justify-between gap-3">
-              <div><b>{t.code} - {t.route?.name}</b><p className="text-sm text-slate-600">{fmtDepartureTime(t.departureAt)} • {t.driver?.name || "Chưa gán tài xế"}</p></div>
-              <select className="input w-auto py-1 text-sm" value={t.status} onChange={(e) => setStatus(t.id, e.target.value)}>
-                {Object.entries(TRIP_STATUS_VI).map(([k, v]) => (
-                  <option key={k} value={k}>
-                    {v}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="mt-4 grid gap-2 md:grid-cols-4">
-              <p>Ghế: <b>{t.bookedSeats}/{t.totalSeats}</b></p>
-              <p>Doanh thu: <b>{formatMoney(t.totalCustomerAmount)}</b></p>
-              <p>Hoa hồng: <b>{formatMoney(t.adminCommission)}</b></p>
-              <p>Công nợ: <b>{formatMoney(t.driverDebtAmount)}</b></p>
-            </div>
-          </div>
-        ))}
       </div>
     </div>
   );

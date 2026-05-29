@@ -37,9 +37,39 @@ const steps = [
     dup: "Duplicate column name 'completed_at'",
   },
   {
+    name: "driver_reject_reason",
+    sql: `ALTER TABLE trips ADD COLUMN driver_reject_reason TEXT NULL AFTER note`,
+    dup: "Duplicate column name 'driver_reject_reason'",
+  },
+  {
     name: "pricing_snapshot_json",
     sql: `ALTER TABLE bookings ADD COLUMN pricing_snapshot_json LONGTEXT NULL AFTER commission_amount`,
     dup: "Duplicate column name 'pricing_snapshot_json'",
+  },
+  {
+    name: "driver_ride_status",
+    sql: `ALTER TABLE bookings ADD COLUMN driver_ride_status VARCHAR(40) NULL AFTER payment_receiver`,
+    dup: "Duplicate column name 'driver_ride_status'",
+  },
+  {
+    name: "driver_cargo_status",
+    sql: `ALTER TABLE bookings ADD COLUMN driver_cargo_status VARCHAR(40) NULL AFTER driver_ride_status`,
+    dup: "Duplicate column name 'driver_cargo_status'",
+  },
+  {
+    name: "payment_status",
+    sql: `ALTER TABLE bookings ADD COLUMN payment_status VARCHAR(40) NOT NULL DEFAULT 'UNPAID' AFTER driver_cargo_status`,
+    dup: "Duplicate column name 'payment_status'",
+  },
+  {
+    name: "payment_collected_at",
+    sql: `ALTER TABLE bookings ADD COLUMN payment_collected_at DATETIME NULL AFTER payment_status`,
+    dup: "Duplicate column name 'payment_collected_at'",
+  },
+  {
+    name: "payment_collected_by_user_id",
+    sql: `ALTER TABLE bookings ADD COLUMN payment_collected_by_user_id INT NULL AFTER payment_collected_at`,
+    dup: "Duplicate column name 'payment_collected_by_user_id'",
   },
   {
     name: "trip_financial_snapshots",
@@ -72,6 +102,53 @@ const steps = [
       INDEX idx_notifications_user (user_id, read_at, created_at)
     )`,
     dup: null,
+  },
+  {
+    name: "cargo_receiver_name",
+    sql: `ALTER TABLE bookings ADD COLUMN cargo_receiver_name VARCHAR(255) NULL AFTER cargo_description`,
+    dup: "Duplicate column name 'cargo_receiver_name'",
+  },
+  {
+    name: "cargo_receiver_phone",
+    sql: `ALTER TABLE bookings ADD COLUMN cargo_receiver_phone VARCHAR(20) NULL AFTER cargo_receiver_name`,
+    dup: "Duplicate column name 'cargo_receiver_phone'",
+  },
+  {
+    name: "parcel_dropoff_address",
+    sql: `ALTER TABLE bookings ADD COLUMN parcel_dropoff_address VARCHAR(500) NULL AFTER cargo_receiver_phone`,
+    dup: "Duplicate column name 'parcel_dropoff_address'",
+  },
+  {
+    name: "has_accompanying_cargo",
+    sql: `ALTER TABLE bookings ADD COLUMN has_accompanying_cargo TINYINT(1) NOT NULL DEFAULT 0 AFTER parcel_dropoff_address`,
+    dup: "Duplicate column name 'has_accompanying_cargo'",
+  },
+  {
+    name: "users_address",
+    sql: `ALTER TABLE users ADD COLUMN address VARCHAR(500) NULL AFTER email`,
+    dup: "Duplicate column name 'address'",
+  },
+  {
+    name: "driver_seat_logs",
+    sql: `CREATE TABLE IF NOT EXISTS driver_seat_logs (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      driver_id INT NOT NULL,
+      trip_id INT NULL,
+      old_available_seats INT NOT NULL,
+      new_available_seats INT NOT NULL,
+      reason TEXT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (driver_id) REFERENCES drivers(id),
+      FOREIGN KEY (trip_id) REFERENCES trips(id),
+      INDEX idx_driver_seat_logs_driver (driver_id, created_at),
+      INDEX idx_driver_seat_logs_trip (trip_id, created_at)
+    )`,
+    dup: null,
+  },
+  {
+    name: "routes_locked",
+    sql: `ALTER TABLE routes ADD COLUMN locked TINYINT(1) NOT NULL DEFAULT 0 AFTER status`,
+    dup: "Duplicate column name 'locked'",
   },
 ];
 

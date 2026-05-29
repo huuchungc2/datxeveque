@@ -15,3 +15,30 @@ export function bookingCapacityLabel(booking: { type?: string; passengerCount?: 
   const n = Number(booking.passengerCount || 0);
   return n > 0 ? `${n} khách` : "—";
 }
+
+/** Nhãn số ghế / khối lượng / loại xe — dùng danh sách & chi tiết admin. */
+export function adminBookingQuantityLabel(booking: {
+  type?: string | null;
+  passengerCount?: number | null;
+  weightKg?: number | string | null;
+  hasAccompanyingCargo?: boolean | null;
+  vehicleType?: string | null;
+}) {
+  const type = booking.type || "";
+  if (type === "CARGO") {
+    const kg = Number(booking.weightKg || 0);
+    return kg > 0 ? `${kg} kg` : "Hàng";
+  }
+  if (type === "MARKET") return "Đi chợ";
+  if (usesPassengerCount(type)) {
+    const n = Math.max(0, Number(booking.passengerCount || 0));
+    const seats = n > 0 ? `${n} ghế` : "Chưa nhập ghế";
+    return booking.hasAccompanyingCargo ? `${seats} + hàng kèm` : seats;
+  }
+  if (booking.vehicleType?.trim()) return booking.vehicleType.trim();
+  return "—";
+}
+
+export function adminBookingSeatUnits(booking: { type?: string | null; passengerCount?: number | null }) {
+  return bookingSeatUnits({ type: booking.type || undefined, passengerCount: booking.passengerCount });
+}

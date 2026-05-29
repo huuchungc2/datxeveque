@@ -1,49 +1,134 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Helmet } from "react-helmet-async";
-import { CalendarClock, MapPinned, Search } from "lucide-react";
-import { api, formatMoney } from "../lib/api";
-import { formatDisplayDateTime } from "../lib/datetime";
-import { normalizeVnPhone, PHONE_INVALID_MESSAGE, phoneInputProps, sanitizePhoneInput } from "../lib/phone";
-import { bookingStatus } from "../lib/vi";
+import { useSearchParams } from "react-router-dom";
+import { ClipboardList, Search } from "lucide-react";
+import { api } from "../lib/api";
+import { normalizeVnPhone, PHONE_INVALID_MESSAGE, sanitizePhoneInput } from "../lib/phone";
+import { BookingCustomerDetail } from "../components/BookingCustomerDetail";
 import { EmptyState, PublicHero } from "../components/ui/DesignKit";
 
-export default function TrackBookingPage() {
-  const [code, setCode] = useState("");
-  const [phone, setPhone] = useState("");
+export function TrackBookingPage() {
+  const [searchParams] = useSearchParams();
+  const [code, setCode] = useState(searchParams.get("code") || "");
+  const [phone, setPhone] = useState(searchParams.get("phone") || "");
   const [booking, setBooking] = useState<any>(null);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const runSearch = async (codeVal: string, phoneVal: string) => {
+    setError("");
+    setBooking(null);
+    const p = normalizeVnPhone(phoneVal);
+    if (!p) {
+      setError(PHONE_INVALID_MESSAGE);
+      return;
+    }
+    if (!codeVal.trim()) {
+      setError("Vui lòng nhập mã đơn.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const r = await api.post("/track-booking", { code: codeVal.trim(), phone: p });
+      setBooking(r.data);
+    } catch (err: any) {
+      setError(
+        err.response?.data?.message || "Không tìm thấy đơn hoặc số điện thoại không đúng."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const c = searchParams.get("code");
+    const p = searchParams.get("phone");
+    if (c && p) {
+      setCode(c);
+      setPhone(p);
+      void runSearch(c, p);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const search = async (e: React.FormEvent) => {
-    e.preventDefault(); setError(""); setBooking(null);
-    const p = normalizeVnPhone(phone);
-    if (!p) return setError(PHONE_INVALID_MESSAGE);
-    try { const r = await api.post("/track-booking", { code: code.trim(), phone: p }); setBooking(r.data); }
-    catch (err: any) { setError(err.response?.data?.message || "Không tìm thấy đơn. Kiểm tra lại mã đơn và số điện thoại."); }
+    e.preventDefault();
+    await runSearch(code, phone);
   };
+
+  const lookup =
+    booking && code && phone
+      ? { code: code.trim(), phone: normalizeVnPhone(phone) || phone }
+      : undefined;
 
   return (
     <>
-      <Helmet><title>Tra cứu đơn | Đặt Xe Về Quê</title></Helmet>
-      <PublicHero title="Tra cứu trạng thái đơn" subtitle="Nhập mã đơn và số điện thoại đã đặt để xem tuyến, giờ đi, giá và trạng thái xử lý." />
-      <div className="page grid gap-6 py-10 lg:grid-cols-[.8fr_1.2fr]">
-        <form className="panel grid gap-4 self-start" onSubmit={search}>
-          <h2 className="text-2xl font-extrabold">Thông tin tra cứu</h2>
-          <label className="font-bold">Mã đơn<input className="input mt-2" value={code} onChange={(e) => setCode(e.target.value)} placeholder="VD: DX000003" required /></label>
-          <label className="font-bold">Số điện thoại<input className="input mt-2" {...phoneInputProps} value={phone} onChange={(e) => setPhone(sanitizePhoneInput(e.target.value))} required /></label>
-          <button className="btn-primary" type="submit"><Search size={18} /> Tra cứu</button>
-          {error && <p className="rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
-        </form>
-        <div>
-          {!booking && !error && <EmptyState title="Chưa có kết quả" subtitle="Sau khi tra cứu thành công, thông tin đơn sẽ hiển thị ở khu vực này." icon={<Search size={26} />} />}
-          {booking && <div className="panel">
-            <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wide text-slate-400">Mã đơn</p><b className="text-2xl">{booking.code}</b></div><span className="badge badge-info">{bookingStatus(booking.status)}</span></div>
-            <div className="mt-5 grid gap-3 md:grid-cols-2">
-              <div className="rounded-3xl bg-slate-50 p-4"><MapPinned className="mb-2 text-brand-700" /><b>Tuyến/chiều</b><p className="mt-1 text-slate-600">{booking.route?.name || booking.direction || "—"}</p></div>
-              <div className="rounded-3xl bg-slate-50 p-4"><CalendarClock className="mb-2 text-orange-600" /><b>Giờ đi</b><p className="mt-1 text-slate-600">{formatDisplayDateTime(booking.scheduledAt, "Chưa hẹn")}</p></div>
-              <div className="rounded-3xl bg-slate-50 p-4 md:col-span-2"><b>Điểm đón/trả</b><p className="mt-1 text-slate-600">{booking.pickupAddress || "—"} → {booking.dropoffAddress || "—"}</p></div>
-            </div>
-            <div className="mt-5 rounded-3xl bg-orange-50 p-4"><p className="text-sm font-bold text-orange-700">Tổng tiền</p><p className="mt-1 text-3xl font-extrabold text-cta-500">{formatMoney(booking.finalTotal || booking.estimatedTotal)}</p></div>
-          </div>}
+      <Helmet>
+        <title>Tra cứu đơn | Đặt Xe Về Quê</title>
+      </Helmet>
+      <PublicHero
+        title="Tra cứu đơn"
+        subtitle="Nhập mã đơn và số điện thoại đặt xe để xem trạng thái, tài xế và thông tin chuyến."
+      />
+
+      <div className="page max-w-5xl py-10">
+        <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
+          <div>
+            <form className="panel bg-white p-6 rounded-3xl shadow-card space-y-4 sticky top-6" onSubmit={search}>
+              <h2 className="text-xl font-extrabold text-ink-900">Tra cứu</h2>
+              <p className="text-xs text-slate-500">Cần đúng cả mã đơn và số điện thoại đã đặt.</p>
+
+              <div>
+                <label className="text-sm font-bold block mb-2">Mã đơn</label>
+                <input
+                  className="input"
+                  placeholder="Ví dụ: DX-260528-XXXX"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-bold block mb-2">Số điện thoại</label>
+                <input
+                  className="input"
+                  placeholder="Số đã dùng khi đặt"
+                  value={phone}
+                  onChange={(e) => setPhone(sanitizePhoneInput(e.target.value))}
+                  required
+                />
+              </div>
+
+              {error && (
+                <div className="rounded-2xl bg-red-50 p-3 text-sm font-semibold text-red-700 border border-red-100">
+                  {error}
+                </div>
+              )}
+
+              <button className="btn-primary w-full justify-center mt-2 flex items-center gap-2" disabled={loading}>
+                <Search size={18} /> {loading ? "Đang tra cứu..." : "Tra cứu đơn"}
+              </button>
+            </form>
+          </div>
+
+          <div>
+            {!booking ? (
+              <div className="panel flex h-full items-center justify-center bg-white border-dashed border-2 border-slate-200 py-16 rounded-3xl">
+                <EmptyState
+                  title="Chưa có kết quả"
+                  subtitle="Nhập mã đơn và số điện thoại để xem chi tiết."
+                  icon={<ClipboardList size={32} className="text-slate-300" />}
+                />
+              </div>
+            ) : (
+              <BookingCustomerDetail
+                booking={booking}
+                lookup={lookup}
+                onRefresh={() => runSearch(code, phone)}
+              />
+            )}
+          </div>
         </div>
       </div>
     </>

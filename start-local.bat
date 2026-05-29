@@ -1,4 +1,5 @@
 @echo off
+setlocal enabledelayedexpansion
 echo ========================================
 echo   Dat Xe Ve Que - Local Development
 echo ========================================
@@ -17,8 +18,22 @@ echo   Vi du: http://192.168.1.10:5173  — API tu dong: http://192.168.1.10:400
 echo   Neu van loi: Windows Firewall - cho phep Node/port 4002 va 5173
 echo.
 
+echo [1/3] Prisma: startup (deploy migrations neu co, hoac db push) + generate (backend)
+pushd "%~dp0backend"
+call npm run prisma:startup
+if errorlevel 1 (
+  echo.
+  echo [ERROR] Prisma startup failed. Hay kiem tra backend/.env DATABASE_URL, MySQL dang chay, va prisma/schema.prisma.
+  popd
+  pause
+  exit /b 1
+)
+popd
+echo.
+
 start "DXVQ Backend" cmd /k "cd /d %~dp0backend && npm run dev"
 timeout /t 3 /nobreak >nul
 start "DXVQ Frontend" cmd /k "cd /d %~dp0frontend && npm run dev"
 
 echo Da khoi dong backend va frontend trong 2 cua so moi.
+echo Neu ban vua sua schema.prisma va can tao migration: vao backend va chay: npm run prisma:migrate

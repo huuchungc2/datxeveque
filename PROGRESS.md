@@ -1,6 +1,6 @@
 # PROGRESS — Đặt Xe Về Quê
 
-Cập nhật: 2026-05-24 (sau test tự động)
+Cập nhật: 2026-05-28 (module khách hàng UI/API)
 
 **Chạy test:** `cd backend && npm run test:acceptance` → **32/32 pass**
 
@@ -55,6 +55,20 @@ Cập nhật: 2026-05-24 (sau test tự động)
 | 11. Data restore | Done (+ `npm run db:migrate`) |
 
 ---
+
+## Module khách hàng (2026-05-28)
+
+| Hạng mục | Trạng thái |
+|----------|------------|
+| Đặt xe / gửi hàng guest + màn thành công (hotline, tra cứu) | Done (UI) |
+| Đặt xe kèm hàng (`hasAccompanyingCargo`) | Done (UI + API) |
+| Form gửi hàng người gửi/nhận | Done (cần `npm run db:migrate`) |
+| Tra cứu `/tra-cuu-don` + tài xế nếu đã gán | Done (API enrich) |
+| Yêu cầu sửa/hủy (trước điều phối) | Done (API + UI) |
+| Khách login: danh sách + chi tiết + phân trang | Done |
+| Trạng thái đơn giản cho khách (`customerBookingStatus`) | Done |
+
+Chạy migration mới: `cd backend && npm run db:migrate` (cột `cargo_receiver_*`, `has_accompanying_cargo`).
 
 ## Ghi chú UI (2026-05)
 

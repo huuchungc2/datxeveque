@@ -23,7 +23,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     const user = await prisma.user.findUnique({ where: { id: decoded.id } });
     if (!user || user.status !== "ACTIVE") {
       res.clearCookie("dxvq_token");
-      return res.status(401).json({ message: "Tài khoản không còn hoạt động" });
+      return res.status(401).json({ message: "Tài khoản đã bị khóa. Liên hệ quản trị." });
     }
 
     req.user = { id: user.id, role: user.role, phone: user.phone, name: user.name };

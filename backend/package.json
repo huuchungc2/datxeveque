@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
+    "prestart": "node scripts/prisma-startup.mjs",
     "start": "node dist/server.js",
     "test:acceptance": "node scripts/acceptance-test.mjs",
     "db:migrate": "node scripts/migrate.mjs",
@@ -13,7 +14,9 @@
     "db:seed-test": "node scripts/seed-test-data.mjs",
     "db:fix-encoding": "node scripts/fix-encoding.mjs",
     "db:seed-pricing": "node scripts/seed-pricing-test.mjs",
+    "prisma:startup": "node scripts/prisma-startup.mjs",
     "prisma:generate": "prisma generate",
+    "prisma:deploy": "prisma migrate deploy",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio"
   },

@@ -3,6 +3,7 @@ import { prisma } from "./prisma.js";
 import { updateBookingMoney } from "./bookingFinance.js";
 import { assertVnPhone } from "./phone.js";
 import { createBookingRecord, type CreateBookingBody } from "./createBooking.js";
+import { parseScheduledAtInput } from "./datetime.js";
 
 export async function patchBookingAdmin(id: number, body: Record<string, unknown>) {
   const existing = await prisma.booking.findUnique({ where: { id } });
@@ -22,7 +23,7 @@ export async function patchBookingAdmin(id: number, body: Record<string, unknown
     scalar.status = body.status;
   }
   if (body.scheduledAt !== undefined) {
-    scalar.scheduledAt = body.scheduledAt ? new Date(String(body.scheduledAt)) : null;
+    scalar.scheduledAt = body.scheduledAt ? parseScheduledAtInput(String(body.scheduledAt)) : null;
   }
 
   const moneyFields =

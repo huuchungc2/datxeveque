@@ -5,8 +5,11 @@ import { Car, LockKeyhole, ShieldCheck, UserPlus } from "lucide-react";
 import { api, API_BASE } from "../lib/api";
 import { normalizeVnPhone, PHONE_INVALID_MESSAGE, phoneInputProps, sanitizePhoneInput } from "../lib/phone";
 import { useAuth } from "../lib/auth";
+import { dashboardPath } from "../lib/accountPath";
 
-function redirectByRole(role: string) { return role === "ADMIN" ? "/admin" : role === "DRIVER" ? "/tai-xe" : "/khach"; }
+function redirectByRole(role: string) {
+  return dashboardPath(role);
+}
 
 function AuthShell({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
   return (

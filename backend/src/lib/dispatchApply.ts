@@ -1,10 +1,75 @@
-import { BookingStatus, TripStatus } from "@prisma/client";
+import { BookingStatus, BookingType, TripStatus } from "@prisma/client";
 import { prisma } from "./prisma.js";
 import { generateCode } from "./codes.js";
 import { sumBookingRollups } from "./settlement.js";
 import { assertDriverAvailableForNewTrip } from "./dispatchDrivers.js";
 import { notifyDispatchAssigned, safeNotify } from "./notifications.js";
 import { bookingSeatUnits } from "./bookingSeats.js";
+import {
+  driverMatchesRun,
+  driverMismatchReason,
+  inferRunDirectionFromBooking,
+  tripMatchesRun,
+  tripMismatchReason,
+  type RunDirection,
+} from "./routeEndpoints.js";
+
+function inferBookingsRun(bookings: { pickupAddress?: string | null; dropoffAddress?: string | null; direction?: string | null; route?: any }[]): RunDirection {
+  const b = bookings[0];
+  if (!b) return "SG_TO_PROVINCE";
+  return inferRunDirectionFromBooking(b);
+}
+
+async function assertBookingsMatchTripRoute(tripId: number, bookingIds: number[]) {
+  const [trip, bookings] = await Promise.all([
+    prisma.trip.findUnique({ where: { id: tripId }, select: { routeId: true, code: true } }),
+    prisma.booking.findMany({ where: { id: { in: bookingIds } }, select: { id: true, routeId: true, code: true } }),
+  ]);
+  if (!trip) throw Object.assign(new Error("Không tìm thấy chuyến"), { statusCode: 404 });
+  for (const b of bookings) {
+    if (Number(b.routeId) !== Number(trip.routeId)) {
+      throw Object.assign(
+        new Error(`Đơn ${b.code} thuộc tuyến khác với chuyến ${trip.code}, không thể gán`),
+        { statusCode: 400 }
+      );
+    }
+  }
+}
+
+async function assertBookingsMatchTripRun(tripId: number, bookingIds: number[]) {
+  const [trip, bookings] = await Promise.all([
+    prisma.trip.findUnique({
+      where: { id: tripId },
+      include: {
+        route: true,
+        driver: true,
+        tripBookings: { include: { booking: { include: { route: true } } } },
+      },
+    }),
+    prisma.booking.findMany({ where: { id: { in: bookingIds } }, include: { route: true } }),
+  ]);
+  if (!trip) throw Object.assign(new Error("Không tìm thấy chuyến"), { statusCode: 404 });
+  if (!bookings.length) return;
+
+  const run = inferBookingsRun(bookings);
+  if (!tripMatchesRun(trip, run)) {
+    throw Object.assign(new Error(tripMismatchReason(run)), { statusCode: 400 });
+  }
+}
+
+async function assertDriverMatchesBookings(driverId: number, bookingIds: number[]) {
+  const [driver, bookings] = await Promise.all([
+    prisma.driver.findUnique({ where: { id: driverId } }),
+    prisma.booking.findMany({ where: { id: { in: bookingIds } }, include: { route: true } }),
+  ]);
+  if (!driver) throw Object.assign(new Error("Không tìm thấy tài xế"), { statusCode: 404 });
+  if (!bookings.length) return;
+
+  const run = inferBookingsRun(bookings);
+  if (!driverMatchesRun(driver, run)) {
+    throw Object.assign(new Error(driverMismatchReason(driver, run)), { statusCode: 400 });
+  }
+}
 
 export async function assignBookingsToTrip(
   tripId: number,
@@ -13,6 +78,9 @@ export async function assignBookingsToTrip(
 ) {
   const ids = Array.from(new Set(bookingIds.map(Number).filter(Boolean)));
   if (!ids.length) throw Object.assign(new Error("Chưa chọn đơn để gán"), { statusCode: 400 });
+
+  await assertBookingsMatchTripRoute(tripId, ids);
+  await assertBookingsMatchTripRun(tripId, ids);
 
   const result = await prisma.$transaction(async (tx) => {
     const trip = await tx.trip.findUnique({ where: { id: tripId } });
@@ -44,6 +112,14 @@ export async function assignBookingsToTrip(
       await tx.tripBooking.create({ data: { tripId, bookingId: id } });
     }
     await tx.booking.updateMany({ where: { id: { in: newBookingIds } }, data: { status: BookingStatus.ASSIGNED } });
+    await tx.booking.updateMany({
+      where: { id: { in: newBookingIds }, type: { not: BookingType.CARGO }, driverRideStatus: null },
+      data: { driverRideStatus: "WAITING_PICKUP" as any },
+    });
+    await tx.booking.updateMany({
+      where: { id: { in: newBookingIds }, type: BookingType.CARGO, driverCargoStatus: null },
+      data: { driverCargoStatus: "WAITING_PICKUP" as any },
+    });
 
     const fin = sumBookingRollups(bookings);
     const updatedTrip = await tx.trip.update({
@@ -137,6 +213,7 @@ export async function createTripAndAssign(input: {
 
   if (input.driverId) {
     await assertDriverAvailableForNewTrip(Number(input.driverId));
+    await assertDriverMatchesBookings(Number(input.driverId), bookingIds);
   }
 
   if (input.driverId && !input.vehicleId) {

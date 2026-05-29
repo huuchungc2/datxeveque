@@ -70,11 +70,46 @@ enum NotificationType {
   DRIVER_TRIP_ASSIGNED
 }
 
+enum DriverBookingRideStatus {
+  WAITING_PICKUP
+  PICKING_UP
+  PICKED_UP
+  DROPPING_OFF
+  DROPPED_OFF
+  CUSTOMER_CANCELLED
+  UNREACHABLE
+  NO_SHOW
+  WAITING_ADMIN_REVIEW
+  WAITING_REDISPATCH
+  CANCELLED_BY_ADMIN
+}
+
+enum DriverBookingCargoStatus {
+  WAITING_PICKUP
+  PICKING_UP
+  PICKED_UP
+  DELIVERING
+  DELIVERED
+  FAILED_PICKUP
+  FAILED_DELIVERY
+  PARCEL_CANCELLED
+  WAITING_ADMIN_REVIEW
+}
+
+enum BookingPaymentStatus {
+  UNPAID
+  CASH_COLLECTED
+  TRANSFERRED
+  ADMIN_COLLECTED
+  WAIVED
+}
+
 model User {
   id            Int            @id @default(autoincrement())
   name          String
   phone         String         @unique
   email         String?        @unique
+  address       String?        @db.VarChar(500)
   passwordHash  String         @map("password_hash")
   role          UserRole
   status        UserStatus     @default(ACTIVE)
@@ -135,6 +170,7 @@ model Driver {
   user        User?    @relation(fields: [userId], references: [id])
   vehicles    Vehicle[]
   trips       Trip[]
+  seatLogs    DriverSeatLog[]
 
   @@map("drivers")
 }
@@ -179,6 +215,7 @@ model Route {
   seoDescription       String?  @map("seo_description") @db.Text
   content              String?  @db.LongText
   status               String   @default("Đang chạy")
+  locked               Boolean  @default(false)
   createdAt            DateTime @default(now()) @map("created_at")
   updatedAt            DateTime @updatedAt @map("updated_at")
   bookings             Booking[]
@@ -235,6 +272,10 @@ model Booking {
   passengerCount      Int           @default(1) @map("passenger_count")
   vehicleType         String?       @map("vehicle_type")
   cargoDescription    String?       @map("cargo_description") @db.Text
+  cargoReceiverName   String?       @map("cargo_receiver_name")
+  cargoReceiverPhone  String?       @map("cargo_receiver_phone")
+  parcelDropoffAddress String?      @map("parcel_dropoff_address")
+  hasAccompanyingCargo Boolean      @default(false) @map("has_accompanying_cargo")
   marketDescription   String?       @map("market_description") @db.Text
   note                String?       @db.Text
   status              BookingStatus @default(NEW)
@@ -243,6 +284,11 @@ model Booking {
   commissionAmount    Decimal       @default(0) @map("commission_amount") @db.Decimal(12, 2)
   pricingSnapshotJson String?       @map("pricing_snapshot_json") @db.LongText
   paymentReceiver     String        @default("DRIVER") @map("payment_receiver")
+  driverRideStatus    DriverBookingRideStatus?  @map("driver_ride_status")
+  driverCargoStatus   DriverBookingCargoStatus? @map("driver_cargo_status")
+  paymentStatus       BookingPaymentStatus      @default(UNPAID) @map("payment_status")
+  paymentCollectedAt  DateTime?                 @map("payment_collected_at")
+  paymentCollectedByUserId Int?                 @map("payment_collected_by_user_id")
   source              String        @default("WEBSITE")
   createdAt           DateTime      @default(now()) @map("created_at")
   updatedAt           DateTime      @updatedAt @map("updated_at")
@@ -272,6 +318,7 @@ model Trip {
   settlementStatus    SettlementStatus @default(PENDING) @map("settlement_status")
   completedAt         DateTime?    @map("completed_at")
   note                String?      @db.Text
+  driverRejectReason  String?      @map("driver_reject_reason") @db.Text
   createdAt           DateTime     @default(now()) @map("created_at")
   updatedAt           DateTime     @updatedAt @map("updated_at")
   route               Route        @relation(fields: [routeId], references: [id])
@@ -279,8 +326,25 @@ model Trip {
   vehicle             Vehicle?     @relation(fields: [vehicleId], references: [id])
   tripBookings        TripBooking[]
   financialSnapshots  TripFinancialSnapshot[]
+  seatLogs            DriverSeatLog[]
 
   @@map("trips")
+}
+
+model DriverSeatLog {
+  id               Int      @id @default(autoincrement())
+  driverId         Int      @map("driver_id")
+  tripId           Int?     @map("trip_id")
+  oldAvailableSeats Int     @map("old_available_seats")
+  newAvailableSeats Int     @map("new_available_seats")
+  reason           String?  @db.Text
+  createdAt        DateTime @default(now()) @map("created_at")
+  driver           Driver   @relation(fields: [driverId], references: [id])
+  trip             Trip?    @relation(fields: [tripId], references: [id])
+
+  @@index([driverId, createdAt])
+  @@index([tripId, createdAt])
+  @@map("driver_seat_logs")
 }
 
 model TripFinancialSnapshot {

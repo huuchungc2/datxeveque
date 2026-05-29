@@ -1,6 +1,10 @@
 import {
   classifyEndpoint,
+  endpointLabel,
+  inferRunDirectionFromBooking,
   inferRunDirection,
+  driverMatchesRun,
+  tripMatchesRun,
   type RouteEndpoint,
   type RunDirection,
 } from "./routeEndpoints.js";
@@ -99,10 +103,6 @@ export function bookingDepartureEndpoint(booking: any): RouteEndpoint {
   return run === "SG_TO_PROVINCE" ? "SG" : "PROVINCE";
 }
 
-function endpointLabel(ep: RouteEndpoint) {
-  return ep === "SG" ? "Sài Gòn (HCM)" : "Đức Linh / Tánh Linh";
-}
-
 /** Gom: tuyến + đầu đi + loại đơn + (giờ nếu đủ đơn, không thì cả ngày) */
 export function groupBookingsForDispatch(bookings: any[]): any[][] {
   const byMeta = new Map<string, any[]>();
@@ -174,34 +174,26 @@ function maxFleetCapacity(drivers: any[], trips: any[]) {
   return Math.max(0, ...fromDrivers, ...fromTrips);
 }
 
-function driverMatchesRun(driver: any, run: RunDirection): boolean {
-  const loc = classifyEndpoint(driver.location);
-  if (run === "SG_TO_PROVINCE") return loc === "SG" || loc === null;
-  return loc === "PROVINCE" || loc === null;
-}
-
 function driverFitsSeats(driver: any, seatsNeeded: number, run: RunDirection) {
-  if (!driverMatchesRun(driver, run)) return null;
   const vehicle = driver.vehicles?.[0];
   if (!vehicle) return null;
   const cap = Number(vehicle.seats);
-  const free = Number(driver.seatsFree ?? cap);
-  const effective = Math.min(cap, free);
-  if (cap < seatsNeeded || effective < seatsNeeded) return null;
-  return { driver, vehicle, cap, effective };
+  if (cap < seatsNeeded) return null;
+  if (!driverMatchesRun(driver, run)) return null;
+  return { driver, vehicle, cap, effective: cap };
 }
 
 function pickDriver(drivers: any[], seatsNeeded: number, run: RunDirection) {
-  const fits = drivers
+  const scored = drivers
     .map((d) => driverFitsSeats(d, seatsNeeded, run))
     .filter(Boolean) as { driver: any; vehicle: any; cap: number; effective: number }[];
 
-  if (!fits.length) return null;
+  if (!scored.length) return null;
 
   const wantDir =
     run === "SG_TO_PROVINCE" ? /sài|sai|hcm|hồ\s*chí/i : /đức|tánh|duc|tanh/i;
 
-  return fits.sort((a, b) => {
+  return scored.sort((a, b) => {
     const aDir = wantDir.test(String(a.driver.direction || "")) ? 1 : 0;
     const bDir = wantDir.test(String(b.driver.direction || "")) ? 1 : 0;
     if (bDir !== aDir) return bDir - aDir;
@@ -214,7 +206,8 @@ function pickTrip(trips: any[], routeId: number, seatsNeeded: number, targetAt: 
     (t) =>
       t.routeId === routeId &&
       Number(t.availableSeats) >= seatsNeeded &&
-      ["COLLECTING", "READY"].includes(t.status)
+      ["COLLECTING", "READY"].includes(t.status) &&
+      tripMatchesRun(t, run)
   );
   if (!ok.length) return null;
   const target = new Date(targetAt).getTime();
@@ -243,14 +236,7 @@ function buildOneSuggestion(
   const routeName = pack[0].route?.name || `Tuyến #${routeId}`;
   const orderType = String(pack[0].type);
   const ep = bookingDepartureEndpoint(pack[0]);
-  const run = inferRunDirection({
-    pickupAddress: pack[0].pickupAddress,
-    dropoffAddress: pack[0].dropoffAddress,
-    direction: pack[0].direction,
-    routeFromName: pack[0].route?.fromName,
-    routeToName: pack[0].route?.toName,
-    routeDirection: pack[0].route?.direction,
-  });
+  const run = inferRunDirectionFromBooking(pack[0]);
   const bookingIds = pack.map((b) => b.id);
   const bookings = bookingLines(pack);
   const seatsNeeded = seatsOf(pack);
@@ -345,7 +331,7 @@ export function buildDispatchSuggestions(
     });
   });
 
-  return suggestions.sort((a, b) => a.departureAt.localeCompare(b.departureAt));
+  return suggestions.sort((a, b) => b.departureAt.localeCompare(a.departureAt));
 }
 
 export function computeDispatchSeatSummary(unassignedBookings: any[]) {

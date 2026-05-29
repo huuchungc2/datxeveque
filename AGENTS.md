@@ -43,10 +43,11 @@ Pass các luồng lõi trong `12_ACCEPTANCE_TEST_FULL.md`, đặc biệt: guest 
 
 | File | Nội dung |
 |------|----------|
-| `frontend/GHI_CHU_LOGIC.md` | Menu accordion, `vi.ts`, đặt xe, điều phối, restore encoding |
+| `frontend/GHI_CHU_LOGIC.md` | Menu accordion, `vi.ts`, **tìm chuyến trang chủ + validate 3 bước đặt xe**, điều phối, restore encoding |
 | `frontend/src/components/Layout.tsx` | Accordion mobile/desktop; `adminNav` 3 nhóm |
 | `frontend/src/lib/vi.ts` | Nhãn tiếng Việt cho enum — dùng helper, không show raw status |
 | `DISPATCH_SETTLEMENT_LOGIC.md` | Gom chuyến, ghế, công nợ (backend) |
+| `TELEGRAM_SETUP.md` | Bot + nhóm Telegram, biến `.env`, sự kiện báo |
 
 **Menu mobile:** đóng mặc định → bấm ☰ → bấm từng nhóm mới bung; chỉ **một** nhóm mở; đổi route thì đóng panel.
 

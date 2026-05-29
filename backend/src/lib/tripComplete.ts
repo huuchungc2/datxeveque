@@ -8,6 +8,51 @@ export type CompleteTripOptions = {
   userId?: number | null;
 };
 
+type CompletionBlocker = { bookingId: number; code: string; type: string; status: string | null };
+
+export function checkTripCompletionEligibility(bookings: any[]) {
+  const passengers = bookings.filter((b) => String(b.type) !== "CARGO");
+  const parcels = bookings.filter((b) => String(b.type) === "CARGO");
+
+  const passengerTerminal = new Set([
+    "DROPPED_OFF",
+    "CANCELLED_BY_ADMIN",
+    "WAITING_REDISPATCH",
+    "CUSTOMER_CANCELLED",
+  ]);
+  const cargoTerminal = new Set([
+    "DELIVERED",
+    "PARCEL_CANCELLED",
+    "FAILED_PICKUP",
+    "FAILED_DELIVERY",
+    "WAITING_ADMIN_REVIEW",
+  ]);
+
+  const passengerBlockers: CompletionBlocker[] = [];
+  const cargoBlockers: CompletionBlocker[] = [];
+
+  for (const b of passengers) {
+    const st = b.driverRideStatus ?? null;
+    if (!st || !passengerTerminal.has(String(st))) {
+      passengerBlockers.push({ bookingId: b.id, code: b.code, type: String(b.type), status: st ? String(st) : null });
+    }
+  }
+
+  for (const b of parcels) {
+    const st = b.driverCargoStatus ?? null;
+    if (!st || !cargoTerminal.has(String(st))) {
+      cargoBlockers.push({ bookingId: b.id, code: b.code, type: String(b.type), status: st ? String(st) : null });
+    }
+  }
+
+  const canComplete = passengerBlockers.length === 0 && cargoBlockers.length === 0;
+  const message = canComplete
+    ? "OK"
+    : `Chưa thể hoàn thành chuyến vì còn ${passengerBlockers.length} khách và ${cargoBlockers.length} đơn hàng chưa ở trạng thái kết thúc. Vui lòng cập nhật trạng thái từng khách/đơn hoặc chờ admin xử lý.`;
+
+  return { canComplete, message, passengerBlockers, cargoBlockers };
+}
+
 function bookingSnapshotRow(booking: any) {
   const fin = rollupBookingFinancials(booking);
   let parsedSnapshot: unknown = null;
@@ -55,6 +100,17 @@ export async function completeTrip(tripId: number, opts: CompleteTripOptions) {
     const bookings = trip.tripBookings.map((tb) => tb.booking);
     if (!bookings.length) {
       throw Object.assign(new Error("Chuyến chưa có đơn, không thể chốt hoa hồng"), { statusCode: 400 });
+    }
+
+    const eligibility = checkTripCompletionEligibility(bookings);
+    if (!eligibility.canComplete) {
+      const err: any = new Error(eligibility.message);
+      err.statusCode = 400;
+      err.details = {
+        passengerBlockers: eligibility.passengerBlockers,
+        cargoBlockers: eligibility.cargoBlockers,
+      };
+      throw err;
     }
 
     const fin = sumBookingRollups(bookings);

@@ -41,4 +41,24 @@ export const allBookingServiceOptions = [
 ];
 
 /** Dịch vụ về quê: cần chọn tuyến mới tính giá tạm tính chuẩn */
-export const ROUTE_REQUIRED_SERVICE_TYPES = new Set(["SHARED_RIDE", "PRIVATE_RIDE", "CARGO"]);
+export const ROUTE_REQUIRED_SERVICE_TYPES = new Set([
+  "SHARED_RIDE",
+  "PRIVATE_RIDE",
+  "CARGO",
+  "MARKET",
+]);
+
+/** Mọi mục menu → route đặt xe (về quê + hợp đồng/đặc biệt). */
+export const allNavServices: readonly ServiceNavItem[] = [
+  ...coreBookableServices,
+  ...specialtyServicePages,
+];
+
+export function findServiceByPath(pathname: string): ServiceNavItem | undefined {
+  const path = pathname.replace(/\/+$/, "") || "/";
+  return allNavServices.find((s) => s.path === path);
+}
+
+export function pathForServiceType(type: string): string {
+  return allNavServices.find((s) => s.type === type)?.path ?? "/dat-xe";
+}

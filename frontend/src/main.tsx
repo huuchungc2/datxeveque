@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
+import { ensureAppTime } from './lib/appTime';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 import './styles/global.css';
@@ -11,25 +12,38 @@ import HomePage from './pages/HomePage';
 import BookingPage from './pages/BookingPage';
 import RoutePage from './pages/RoutePage';
 import { LoginPage, RegisterPage, ForgotPasswordPage, ResetPasswordPage } from './pages/AuthPages';
-import { PostsPage, PostDetailPage } from './pages/PostsPage';
-import { AdminBookings, AdminDashboard, AdminDrivers, AdminReports, AdminSettings, AdminTrips, AdminUsers } from './pages/AdminPages';
+import { PostsPage } from './pages/PostsPage';
+import { PostDetailPage } from './pages/PostDetailPage';
+import { AdminDashboard, AdminReports, AdminSettings, AdminUsers } from './pages/AdminPages';
+import { AdminDrivers } from './pages/AdminDrivers';
+import { AdminTrips } from './pages/AdminTrips';
+import { AdminBookings } from './pages/AdminBookings';
+import { AdminBookingDetail } from './pages/AdminBookingDetail';
 import { AdminDispatch } from './pages/AdminDispatch';
 import { AdminDebts } from './pages/AdminFinance';
 import { AdminCatalogHub, AdminContentHub } from './pages/AdminHubPages';
-import TrackBookingPage from './pages/TrackBookingPage';
+import { TrackBookingPage } from './pages/TrackBookingPage';
 import ContactPage from './pages/ContactPage';
-import { DriverAvailability, DriverDebts, DriverJobs } from './pages/DriverPages';
+import { DriverAvailability, DriverDebts, DriverJobs, DriverNotifications, DriverTripDetail, DriverDashboard } from './pages/DriverPages';
 import { CustomerHome } from './pages/CustomerPages';
+import { AccountProfilePage } from './pages/AccountProfilePage';
 import { coreBookableServices } from './routes/bookableServices';
 import { specialtyServicePages } from './routes/serviceRoutes';
 
-function App(){return <HelmetProvider><SiteSettingsProvider><AuthProvider><BrowserRouter><Routes>
+function AppTimeInit() {
+  useEffect(() => {
+    void ensureAppTime();
+  }, []);
+  return null;
+}
+
+function App(){return <HelmetProvider><SiteSettingsProvider><AuthProvider><BrowserRouter><AppTimeInit /><Routes>
 <Route path="/" element={<PublicLayout><HomePage/></PublicLayout>} />
 {coreBookableServices.map((s) => (
-  <Route key={s.path} path={s.path} element={<PublicLayout><BookingPage type={s.type} title={s.title}/></PublicLayout>} />
+  <Route key={s.path} path={s.path} element={<PublicLayout><BookingPage key={s.path} type={s.type} title={s.title}/></PublicLayout>} />
 ))}
 {specialtyServicePages.map((s) => (
-  <Route key={s.path} path={s.path} element={<PublicLayout><BookingPage type={s.type} title={s.title}/></PublicLayout>} />
+  <Route key={s.path} path={s.path} element={<PublicLayout><BookingPage key={s.path} type={s.type} title={s.title}/></PublicLayout>} />
 ))}
 <Route path="/dang-nhap" element={<PublicLayout><LoginPage/></PublicLayout>} />
 <Route path="/dang-ky" element={<PublicLayout><RegisterPage/></PublicLayout>} />
@@ -42,6 +56,7 @@ function App(){return <HelmetProvider><SiteSettingsProvider><AuthProvider><Brows
 <Route path="/:slug" element={<PublicLayout><RoutePage/></PublicLayout>} />
 <Route path="/admin" element={<ProtectedRoute roles={["ADMIN","DISPATCHER","ACCOUNTANT"]}><DashboardLayout type="admin"><AdminDashboard/></DashboardLayout></ProtectedRoute>} />
 <Route path="/admin/don-hang" element={<ProtectedRoute roles={["ADMIN","DISPATCHER","ACCOUNTANT"]}><DashboardLayout type="admin"><AdminBookings/></DashboardLayout></ProtectedRoute>} />
+<Route path="/admin/don-hang/:id" element={<ProtectedRoute roles={["ADMIN","DISPATCHER","ACCOUNTANT"]}><DashboardLayout type="admin"><AdminBookingDetail/></DashboardLayout></ProtectedRoute>} />
 <Route path="/admin/dispatch" element={<ProtectedRoute roles={["ADMIN","DISPATCHER","ACCOUNTANT"]}><DashboardLayout type="admin"><AdminDispatch/></DashboardLayout></ProtectedRoute>} />
 <Route path="/admin/dieu-phoi" element={<ProtectedRoute roles={["ADMIN","DISPATCHER","ACCOUNTANT"]}><DashboardLayout type="admin"><AdminTrips/></DashboardLayout></ProtectedRoute>} />
 <Route path="/admin/chuyen-xe" element={<Navigate to="/admin/dieu-phoi" replace />} />
@@ -56,10 +71,16 @@ function App(){return <HelmetProvider><SiteSettingsProvider><AuthProvider><Brows
 <Route path="/admin/tuyen" element={<Navigate to="/admin/danh-muc" replace />} />
 <Route path="/admin/gia" element={<Navigate to="/admin/danh-muc" replace />} />
 <Route path="/admin/cai-dat" element={<ProtectedRoute roles={["ADMIN"]}><DashboardLayout type="admin"><AdminSettings/></DashboardLayout></ProtectedRoute>} />
-<Route path="/tai-xe" element={<ProtectedRoute roles={["DRIVER"]}><DashboardLayout type="driver"><DriverJobs/></DashboardLayout></ProtectedRoute>} />
+<Route path="/admin/tai-khoan" element={<ProtectedRoute roles={["ADMIN","DISPATCHER","ACCOUNTANT"]}><DashboardLayout type="admin"><AccountProfilePage/></DashboardLayout></ProtectedRoute>} />
+<Route path="/tai-xe" element={<ProtectedRoute roles={["DRIVER"]}><DashboardLayout type="driver"><DriverDashboard/></DashboardLayout></ProtectedRoute>} />
+<Route path="/tai-xe/chuyen" element={<ProtectedRoute roles={["DRIVER"]}><DashboardLayout type="driver"><DriverJobs/></DashboardLayout></ProtectedRoute>} />
+<Route path="/tai-xe/chuyen/:tripId" element={<ProtectedRoute roles={["DRIVER"]}><DashboardLayout type="driver"><DriverTripDetail/></DashboardLayout></ProtectedRoute>} />
+<Route path="/tai-xe/thong-bao" element={<ProtectedRoute roles={["DRIVER"]}><DashboardLayout type="driver"><DriverNotifications/></DashboardLayout></ProtectedRoute>} />
 <Route path="/tai-xe/san-sang" element={<ProtectedRoute roles={["DRIVER"]}><DashboardLayout type="driver"><DriverAvailability/></DashboardLayout></ProtectedRoute>} />
 <Route path="/tai-xe/cong-no" element={<ProtectedRoute roles={["DRIVER"]}><DashboardLayout type="driver"><DriverDebts/></DashboardLayout></ProtectedRoute>} />
+<Route path="/tai-xe/tai-khoan" element={<ProtectedRoute roles={["DRIVER"]}><DashboardLayout type="driver"><AccountProfilePage/></DashboardLayout></ProtectedRoute>} />
 <Route path="/khach" element={<ProtectedRoute roles={["CUSTOMER"]}><DashboardLayout type="customer"><CustomerHome/></DashboardLayout></ProtectedRoute>} />
+<Route path="/khach/tai-khoan" element={<ProtectedRoute roles={["CUSTOMER"]}><DashboardLayout type="customer"><AccountProfilePage/></DashboardLayout></ProtectedRoute>} />
 </Routes></BrowserRouter></AuthProvider></SiteSettingsProvider></HelmetProvider>}
 
 ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>);

@@ -9,6 +9,12 @@ export const api = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+/** Gọi khi API trả 401 (tài khoản khóa / hết phiên) — AuthProvider gắn logout UI. */
+let onUnauthorized: (() => void) | null = null;
+export function setUnauthorizedHandler(handler: (() => void) | null) {
+  onUnauthorized = handler;
+}
+
 api.interceptors.response.use(
   (res) => {
     const body = res.data;
@@ -23,6 +29,9 @@ api.interceptors.response.use(
     return res;
   },
   (err) => {
+    if (err.response?.status === 401) {
+      onUnauthorized?.();
+    }
     const msg = err.response?.data?.message;
     if (msg && err.response?.data && typeof err.response.data === "object") {
       err.response.data = { message: msg };

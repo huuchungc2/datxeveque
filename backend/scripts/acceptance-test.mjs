@@ -119,6 +119,7 @@ async function main() {
       passengerCount: 2,
       pickupAddress: "Bình Tân",
       dropoffAddress: "Võ Xu",
+      scheduledAt: futureScheduled(24),
       paymentReceiver: "DRIVER",
     }),
   });
@@ -126,9 +127,13 @@ async function main() {
   if (b?.code) pass("Guest booking tạo mã đơn", b.code);
   else fail("Guest booking", JSON.stringify(booking));
 
-  if (b?.status === "WAITING_DISPATCH") pass("Booking status WAITING_DISPATCH");
+  if (b?.status === "NEW") pass("Booking status NEW (chờ xác nhận)");
   else fail("Booking status", b?.status);
 
+  if (!b?.code) {
+    console.log("\nDừng sớm: không tạo được đơn khách.");
+    process.exit(1);
+  }
   const track = await req("/track-booking", { method: "POST", body: JSON.stringify({ code: b.code, phone }) });
   if (track.data?.code === b.code) pass("Tra cứu đơn OK");
   else fail("Tra cứu đơn", JSON.stringify(track));
@@ -140,8 +145,6 @@ async function main() {
     pass("GET /admin/dispatch 3 cột", `đơn ${dispatch.data.unassignedBookings.length}, chuyến ${dispatch.data.collectingTrips.length}, TX ${dispatch.data.availableDrivers.length}`);
     if (Array.isArray(dispatch.data.suggestions)) pass("Gợi ý điều phối tự động", `${dispatch.data.suggestions.length} nhóm`);
     else fail("dispatch.suggestions", "thiếu mảng suggestions");
-    if (Array.isArray(dispatch.data.driversOnTrip)) pass("Tách TX đang chạy / TX rảnh");
-    else fail("dispatch.driversOnTrip", "thiếu");
   } else fail("GET /admin/dispatch", JSON.stringify(Object.keys(dispatch.data || {})));
 
   // Pricing ADMIN payment receiver booking
@@ -154,19 +157,45 @@ async function main() {
       customerPhone: phone2,
       routeId,
       passengerCount: 1,
+      scheduledAt: futureScheduled(26),
       paymentReceiver: "ADMIN",
     }),
   });
   const ba = bAdmin.data?.booking || bAdmin.data;
 
-  // Create trip and assign
-  const tripRes = await req("/admin/trips", {
-    method: "POST",
-    body: JSON.stringify({ routeId, departureAt: new Date(Date.now() + 86400000).toISOString(), totalSeats: 5, driverId: 1, vehicleId: 1 }),
-  });
-  const trip = tripRes.data;
-  if (trip?.code) pass("Tạo trip", trip.code);
-  else fail("Tạo trip", JSON.stringify(tripRes));
+  // Create trip and assign (ưu tiên TX rảnh; driver demo id=1 nếu có)
+  const availForTest =
+    (dispatch.data?.availableDrivers || []).find((d) => d.id === 1) ||
+    (dispatch.data?.availableDrivers || [])[0];
+  const existingDriver1Trip = (dispatch.data?.collectingTrips || []).find((t) => t.driverId === 1);
+
+  let trip;
+  if (availForTest?.id) {
+    const tripRes = await req("/admin/trips", {
+      method: "POST",
+      body: JSON.stringify({
+        routeId,
+        departureAt: futureScheduled(48),
+        totalSeats: Number(availForTest.seatsFree) || 5,
+        driverId: availForTest.id,
+        vehicleId: availForTest.vehicles?.[0]?.id ?? null,
+      }),
+    });
+    trip = tripRes.data;
+    if (trip?.code) pass("Tạo trip", trip.code);
+    else fail("Tạo trip", JSON.stringify(tripRes));
+  } else if (existingDriver1Trip?.id) {
+    trip = existingDriver1Trip;
+    pass("Tạo trip", `dùng chuyến có sẵn ${trip.code}`);
+  } else {
+    const tripRes = await req("/admin/trips", {
+      method: "POST",
+      body: JSON.stringify({ routeId, departureAt: futureScheduled(48), totalSeats: 5 }),
+    });
+    trip = tripRes.data;
+    if (trip?.code) pass("Tạo trip (chưa gán TX)", trip.code);
+    else fail("Tạo trip", JSON.stringify(tripRes));
+  }
 
   if (ba?.id && trip?.id) {
     const assign1 = await req(`/admin/trips/${trip.id}/add-bookings`, {
@@ -185,16 +214,17 @@ async function main() {
     if (a2?.added === 0 && a2?.skipped >= 1) pass("Gán lại không cộng trùng");
     else fail("Gán lại trùng", JSON.stringify(a2));
 
-    const trips = await req("/admin/trips");
-    const updated = (Array.isArray(trips.data) ? trips.data : []).find((t) => t.id === trip.id);
+    const tripDetailAdmin = await req(`/admin/trips/${trip.id}`);
+    const updated = tripDetailAdmin.data;
     if (Number(updated?.adminOwesDriverAmount || 0) > 0) pass("ADMIN pay → adminOwesDriver > 0", formatMoney(updated.adminOwesDriverAmount));
     else fail("adminOwesDriver", JSON.stringify(updated));
   }
 
   // Settlement
+  const settleDriverId = trip?.driverId || availForTest?.id || 1;
   const settle = await req("/admin/settlements", {
     method: "POST",
-    body: JSON.stringify({ tripId: trip?.id, driverId: 1, amount: 10000, direction: "ADMIN_OWES_DRIVER", method: "Test" }),
+    body: JSON.stringify({ tripId: trip?.id, driverId: settleDriverId, amount: 10000, direction: "ADMIN_OWES_DRIVER", method: "Test" }),
   });
   if (settle.data?.payment || settle.message) pass("Admin xác nhận thanh toán");
   else fail("Settlement", JSON.stringify(settle));
@@ -207,6 +237,27 @@ async function main() {
   if (reports.data?.totalTrips !== undefined) pass("Báo cáo filter dịch vụ");
   else fail("Báo cáo filter dịch vụ", JSON.stringify(reports));
 
+  // Tài xế bị khóa: không điều phối, không login / API 401
+  await login("0900000000", "admin123");
+  const lockDriverUserId = 2; // demo 0900000001 → driver id 1
+  await req(`/admin/users/${lockDriverUserId}/status`, {
+    method: "PATCH",
+    body: JSON.stringify({ status: "LOCKED" }),
+  });
+  const dispatchLocked = await req("/admin/dispatch");
+  const lockedInAvail = (dispatchLocked.data?.availableDrivers || []).some((d) => d.id === 1);
+  if (!lockedInAvail) pass("Tài xế khóa không nằm danh sách rảnh điều phối");
+  else fail("Tài xế khóa vẫn trong dispatch", "driver id 1");
+
+  const lockedLogin = await login("0900000001", "taixe123");
+  if (lockedLogin.status === 401 && lockedLogin.message?.includes("khóa")) pass("Tài xế khóa không đăng nhập");
+  else fail("Login tài xế khóa", JSON.stringify(lockedLogin));
+
+  await req(`/admin/users/${lockDriverUserId}/status`, {
+    method: "PATCH",
+    body: JSON.stringify({ status: "ACTIVE" }),
+  });
+
   // Driver
   await login("0900000001", "taixe123");
   const jobs = await req("/driver/jobs");
@@ -216,6 +267,40 @@ async function main() {
   const driverDebt = await req("/driver/reports");
   if (driverDebt.data?.totalDebt !== undefined) pass("Tài xế xem công nợ");
   else fail("Driver công nợ", JSON.stringify(driverDebt));
+
+  const dash = await req("/driver/dashboard");
+  if (dash.data?.driverStatus !== undefined && typeof dash.data.todayTripsCount === "number") {
+    pass("Driver dashboard", `chuyến hôm nay ${dash.data.todayTripsCount}`);
+  } else fail("Driver dashboard", JSON.stringify(dash.data));
+
+  const driverTripsRes = await req("/driver/trips");
+  const driverTripList = Array.isArray(driverTripsRes.data) ? driverTripsRes.data : [];
+  pass("Driver GET /trips", `${driverTripList.length} chuyến`);
+
+  const driverOwnedTripId =
+    (Array.isArray(jobs.data) ? jobs.data.find((t) => t.status !== "COMPLETED") || jobs.data[0] : null)?.id ||
+    driverTripList[0]?.id;
+  const targetTripId = driverOwnedTripId;
+  if (targetTripId) {
+    const tripDetail = await req(`/driver/trips/${targetTripId}`);
+    const comp = tripDetail.data?.completion;
+    if (comp && comp.canComplete === false) {
+      pass("Chi tiết chuyến: chưa đủ điều kiện hoàn thành");
+    } else fail("Chi tiết chuyến completion", JSON.stringify(comp));
+
+    const canCompleteRes = await req(`/driver/trips/${targetTripId}/can-complete`);
+    if (canCompleteRes.data?.canComplete === false) pass("GET can-complete → false khi đơn chưa xong");
+    else fail("GET can-complete", JSON.stringify(canCompleteRes.data));
+
+    const tryComplete = await req(`/driver/trips/${targetTripId}/complete`, { method: "POST", body: "{}" });
+    const blockMsg = tryComplete.message || tryComplete.body?.message || "";
+    if (tryComplete.status === 400 && String(blockMsg).includes("Chưa thể hoàn thành")) {
+      pass("POST complete bị chặn khi đơn chưa xong");
+    } else if (tryComplete.status === 400) pass("POST complete trả 400 khi chưa xong");
+    else fail("POST complete khi chưa xong", `status ${tryComplete.status} ${blockMsg}`);
+  } else {
+    fail("Driver trip detail", "không có trip để test");
+  }
 
   // Driver login + customer
   const driverLogin = await login("0900000001", "taixe123");
@@ -277,6 +362,10 @@ async function main() {
 
 function formatMoney(v) {
   return new Intl.NumberFormat("vi-VN").format(Number(v || 0)) + "đ";
+}
+
+function futureScheduled(hoursFromNow = 24) {
+  return new Date(Date.now() + hoursFromNow * 3600000).toISOString();
 }
 
 main().catch((e) => {

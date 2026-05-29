@@ -12,9 +12,9 @@ export function usesPassengerCount(type?: string | BookingType | null) {
   return type != null && !SERVICES_WITHOUT_PASSENGERS.has(type);
 }
 
-/** Số chỗ chiếm khi gom chuyến (đơn hàng = 1 chỗ; xe khách = passengerCount) */
+/** Số chỗ chiếm khi gom chuyến (gửi hàng/đi chợ = 0; xe khách = passengerCount) */
 export function bookingSeatUnits(booking: { type?: string | BookingType | null; passengerCount?: number | null }) {
-  if (!usesPassengerCount(booking.type)) return 1;
+  if (!usesPassengerCount(booking.type)) return 0;
   return Math.max(0, Number(booking.passengerCount || 0));
 }
 
@@ -30,7 +30,7 @@ export function bookingCapacityLabel(booking: {
   type?: string | BookingType | null;
   passengerCount?: number | null;
 }) {
-  if (!usesPassengerCount(booking.type)) return "1 đơn";
+  if (!usesPassengerCount(booking.type)) return "Gửi hàng";
   const n = Number(booking.passengerCount || 0);
   return n > 0 ? `${n} khách` : "—";
 }

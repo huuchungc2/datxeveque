@@ -58,12 +58,49 @@ Tài liệu ngắn để nhớ quy ước UI/FE (cập nhật khi đổi hành v
 
 ---
 
+## Trang chủ — form tìm chuyến (`HomePage.tsx`)
+
+- Form hero: chọn **loại dịch vụ** (tab) → **tuyến** → **ngày giờ** → nút **Tìm chuyến xe**.
+- **`noValidate`** trên `<form>` — chỉ hiện lỗi tiếng Việt (`searchError`), không dùng popup mặc định trình duyệt.
+- **`validateSearchForm()`** (trước `navigate`):
+  - Bắt buộc `routeId` — không chọn tuyến → *"Vui lòng chọn tuyến đường trước khi tìm chuyến."*, không chuyển trang.
+  - Bắt buộc `scheduledAt`; không chọn ngày quá khứ (`isLocalDateBeforeToday`).
+- **Lỗi tại chỗ:** `fieldErrors` + `FieldError` dưới ô; `focusFormField` (`lib/formFieldFocus.ts`) — không banner chung phía trên form.
+- Hợp lệ → `navigate` tới `path` dịch vụ (`bookableServices`) với query **`routeId` + `scheduledAt`** (luôn có `routeId`).
+- Đổi tuyến / ngày / tab dịch vụ → xóa lỗi field tương ứng.
+- Ngày giờ: `GregorianDateTimeInput` `minFromNow` + `resolveBookingScheduledAt` — cùng quy tắc với form đặt xe (`lib/datetime.ts`, `suggestedBookingDepartureHint()`).
+- **Lưu ý:** Các card «Tất cả dịch vụ» phía dưới vẫn dùng `bookingQuery()` — có thể vào đặt xe **không** qua validate form hero (chỉ nút Tìm chuyến bắt tuyến).
+
+---
+
 ## Đặt xe công khai (`BookingPage.tsx`)
 
 - Khách **không login**; `paymentReceiver` luôn gửi `DRIVER` (ẩn UI chọn người thu tiền).
-- **Bắt buộc** `scheduledAt` (ngày giờ đi).
-- Giá tạm tính: gọi API sau khi chọn **loại dịch vụ** + **tuyến** (nếu loại cần tuyến — xem `ROUTE_REQUIRED_SERVICE_TYPES` trong `bookableServices.ts`).
-- SĐT: `lib/phone.ts` — 10 số, bắt đầu `0`.
+- Loại dịch vụ theo **URL/menu** (`findServiceByPath`) — không còn grid chọn loại trên form; đổi dịch vụ = đổi route menu.
+- Form **3 bước** (stepper): `1 Hành trình` → `2 Đón trả` → `3 Liên hệ`. Dữ liệu giữ trong `form` state; **Quay lại** / bấm số bước đã qua **không xóa** lựa chọn.
+- **Lưu nháp:** `sessionStorage` key `dxvq-booking-draft:{pathname}` — mỗi thay đổi `form` + `step`; F5/tab mới khôi phục (trừ khi vào bằng `?routeId&scheduledAt` từ trang chủ). Xóa nháp khi đặt thành công.
+- **Không reset bước** khi chỉ chuyển bước trong cùng URL; chỉ `setStep(1)` khi **đổi menu dịch vụ** (`location.pathname` đổi).
+- **Địa chỉ theo tuyến:** chỉ xóa quận/phường/đường khi khách **đổi tuyến** — không xóa lúc API `routes` load lần đầu (`prevRouteIdRef` null → id).
+- **Nguyên tắc validate:** *bước nào thì chặn ở bước đó* khi bấm **Tiếp tục**; không để lỗi từ bước 1/2 chỉ hiện lúc **Xác nhận** (tránh bắt user quay lui).
+
+### Validate từng bước (`validateStep1Fields` / `validateStep2Fields` / `validateStep3Fields`)
+
+| Bước | Hàm | Khi bấm «Tiếp tục» |
+|------|-----|-------------------|
+| 1 | `validateStep1Fields` | Tuyến nếu `needsRoute` (`ROUTE_REQUIRED_SERVICE_TYPES`); `scheduledAt` (+ không ngày quá khứ, `resolveBookingScheduledAt`); **CARGO:** mô tả hàng + cân nặng ≥ 1 kg; **MARKET:** mô tả đồ cần mua |
+| 2 | `validateStep2Fields` | Đủ địa chỉ: preset tuyến → quận → phường → số nhà/đường; không preset → nhập text đón/trả. Thiếu tuyến → lỗi + `setStep(1)` |
+| 3 | `validateStep3Fields` | Họ tên, SĐT đặt (`lib/phone.ts`); CARGO/MARKET: người nhận + SĐT; xe có hàng đi kèm → mô tả hàng |
+
+- **Lỗi tại chỗ:** `fieldErrors` + `FieldError` ngay dưới ô; `markFieldError(key, msg)` → focus + viền đỏ (`inputInvalidClass`). Banner đỏ trên cùng **chỉ** lỗi API (`submitBooking` catch).
+- **`nextStep()`:** validate step hiện tại; thiếu tuyến ở step 2 → `setStep(1)` + focus tuyến (`pendingFocusKey` sau đổi step).
+- **`submitBooking()`:** validate **bước 3 trước** (tên/SĐT — không bị đẩy về bước 1 vì giờ); sau đó bước 2, bước 1. Giờ đi đã chọn ở bước 1 **không** bắt “chọn lại” — `resolveBookingScheduledAt` clamp im lặng (+1h hôm nay). `useEffect` URL **không** ghi đè `scheduledAt` user đã chọn (chỉ áp query khi vào trang / đổi menu).
+- Bước 3 có khối **Hành trình đã chọn** + link «Sửa tuyến / ngày giờ».
+- Giá tạm tính: API `/price/estimate` sau khi có loại + tuyến (`canEstimatePrice`); thanh sticky dưới mobile (`pb-24`).
+
+### Ngày giờ & địa chỉ theo tuyến
+
+- `lib/datetime.ts`: hôm nay không chọn giờ quá khứ; gợi ý **now + 1h** (`minBookingDepartureLocal`, `minFromNow` trên picker); `onChange` luôn qua `resolveBookingScheduledAt` — **không** báo lỗi cứng «chọn lại giờ» trên UI.
+- `RouteAddressField` + `fixedEndpoint` `from`/`to`: sau khi chọn tuyến, đón/lấy = `fromName`, trả/giao = `toName`; user chỉ chọn quận → phường → số nhà (`serviceAreaAddress.ts`, `routeAddress.ts`).
 
 ---
 
@@ -105,8 +142,14 @@ Tài liệu ngắn để nhớ quy ước UI/FE (cập nhật khi đổi hành v
 | File | Việc |
 |------|------|
 | `components/Layout.tsx` | Menu public + sidebar admin accordion |
+| `pages/HomePage.tsx` | Form tìm chuyến — bắt tuyến + ngày giờ |
+| `pages/BookingPage.tsx` | Đặt xe 3 bước + validate từng bước |
+| `lib/datetime.ts` | Min ngày/giờ, gợi ý +1h, `resolveBookingScheduledAt` |
+| `lib/formFieldFocus.ts` | `focusFormField`, `inputInvalidClass` |
+| `components/ui/FieldError.tsx` | Dòng lỗi dưới input |
+| `components/RouteAddressField.tsx` | Địa chỉ quận/phường/đường theo tuyến |
 | `lib/vi.ts` | Nhãn enum tiếng Việt |
 | `lib/serviceTypes.ts` | Loại dịch vụ đặt xe |
-| `routes/bookableServices.ts` | Menu + route xe ghép/bao xe/… |
+| `routes/bookableServices.ts` | Menu + route + `ROUTE_REQUIRED_SERVICE_TYPES` |
 | `routes/serviceRoutes.tsx` | Xe đám cưới, BV, sân bay, … |
 | `lib/phone.ts` | Validate SĐT VN |
