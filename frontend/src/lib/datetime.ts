@@ -57,11 +57,13 @@ export function buildAppTimeFallback(): AppTimePayload {
   const p = zonedPartsFromInstant(now);
   const today = `${p.year}-${pad(p.month)}-${pad(p.day)}`;
   const wall = `${today}T${pad(p.hour)}:${pad(p.minute)}`;
+  const suggested = new Date(now.getTime() + 60 * 60 * 1000);
+  const sp = zonedPartsFromInstant(suggested);
   return {
     timezone: APP_TIMEZONE,
     today,
     nowWallClock: wall,
-    minBookingDeparture: wall,
+    minBookingDeparture: `${sp.year}-${pad(sp.month)}-${pad(sp.day)}T${pad(sp.hour)}:${pad(sp.minute)}`,
   };
 }
 
@@ -140,10 +142,6 @@ export function todayLocalDateValue(): string {
   return serverAppTime?.today ?? buildAppTimeFallback().today;
 }
 
-export function nowDepartureLocal(): string {
-  return serverAppTime?.nowWallClock ?? buildAppTimeFallback().nowWallClock;
-}
-
 export function defaultDepartureLocal(): string {
   const start = localPartsToDate(parseLocalDateTimeParts(todayLocalDateValue())!);
   const tomorrow = new Date(start.getTime() + 24 * 60 * 60 * 1000);
@@ -155,13 +153,33 @@ export function localPartsToDate(p: LocalDateTimeParts): Date {
   return new Date(Date.UTC(p.year, p.month - 1, p.day, p.hour - 7, p.minute, 0, 0));
 }
 
+function nowDepartureWallClock(): string {
+  return serverAppTime?.nowWallClock ?? buildAppTimeFallback().nowWallClock;
+}
+
 function minBookingDepartureWallClock(): string {
   return serverAppTime?.minBookingDeparture ?? buildAppTimeFallback().minBookingDeparture;
 }
 
+/** Giờ hiện tại (VN) — sàn tối thiểu khi chọn / xác nhận (chỉ chặn quá khứ). */
+export function nowDepartureParts(): LocalDateTimeParts {
+  const p = parseLocalDateTimeParts(nowDepartureWallClock());
+  return p!;
+}
+
+export function nowDepartureLocal(): string {
+  return nowDepartureWallClock();
+}
+
+export function nowDepartureDate(): Date {
+  const p = nowDepartureParts();
+  return localPartsToDate(p);
+}
+
+/** Gợi ý mặc định khi mở form: now + 1h (không bắt buộc lúc xác nhận). */
 export function minBookingDepartureDate(): Date {
   const p = parseLocalDateTimeParts(minBookingDepartureWallClock());
-  return p ? localPartsToDate(p) : new Date();
+  return p ? localPartsToDate(p) : new Date(Date.now() + 60 * 60 * 1000);
 }
 
 export function minBookingDepartureParts(): LocalDateTimeParts {
@@ -175,13 +193,14 @@ export function minBookingDepartureLocal(): string {
 
 export function suggestedBookingDepartureHint(): string {
   const p = minBookingDepartureParts();
-  return `Hôm nay chọn giờ từ ${pad(p.hour)}:${pad(p.minute)} trở đi (không chọn quá khứ, theo giờ hệ thống)`;
+  return `Gợi ý hôm nay: ${pad(p.hour)}:${pad(p.minute)} (now + 1 giờ). Có thể chọn sớm hơn; xác nhận chỉ chặn giờ quá khứ.`;
 }
 
+/** Chuẩn hóa giờ đi: mặc định +1h; nếu quá khứ hôm nay thì clamp về now (không ép +1h). */
 export function resolveBookingScheduledAt(value?: string | null): string {
   if (!value?.trim()) return minBookingDepartureLocal();
   if (isLocalDateBeforeToday(value)) return value;
-  if (isLocalDateTimeBeforeMinBooking(value)) return minBookingDepartureLocal();
+  if (isLocalDateTimeInPast(value)) return nowDepartureLocal();
   return toDatetimeLocalValue(value) || minBookingDepartureLocal();
 }
 
@@ -195,7 +214,7 @@ export function isLocalDateBeforeToday(value?: string | null): boolean {
   return day < todayLocalDateValue();
 }
 
-export function isLocalDateTimeBeforeMinBooking(value?: string | null): boolean {
+export function isLocalDateTimeInPast(value?: string | null): boolean {
   const p = parseLocalDateTimeParts(value);
   if (!p) return false;
   const chosen = localPartsToDate(p);
@@ -203,10 +222,15 @@ export function isLocalDateTimeBeforeMinBooking(value?: string | null): boolean 
   const chosenDay = `${p.year}-${pad(p.month)}-${pad(p.day)}`;
   if (chosenDay < today) return true;
   if (chosenDay > today) return false;
-  return chosen.getTime() < minBookingDepartureDate().getTime();
+  return chosen.getTime() < nowDepartureDate().getTime();
 }
 
-/** @deprecated Dùng isLocalDateTimeBeforeMinBooking cho form đặt xe. */
+/** @deprecated Dùng isLocalDateTimeInPast — gợi ý +1h không còn là sàn bắt buộc. */
+export function isLocalDateTimeBeforeMinBooking(value?: string | null): boolean {
+  return isLocalDateTimeInPast(value);
+}
+
+/** @deprecated Dùng isLocalDateTimeInPast. */
 export function isLocalDateTimeBeforeNow(value?: string | null): boolean {
-  return isLocalDateTimeBeforeMinBooking(value);
+  return isLocalDateTimeInPast(value);
 }

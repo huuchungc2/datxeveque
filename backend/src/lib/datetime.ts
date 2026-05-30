@@ -115,7 +115,7 @@ export function minBookingDepartureInstant(): Date {
   const d = new Date();
   d.setUTCSeconds(0, 0);
   d.setUTCMilliseconds(0);
-  return d;
+  return new Date(d.getTime() + 60 * 60 * 1000);
 }
 
 export function getAppTimePayload() {

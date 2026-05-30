@@ -23,8 +23,8 @@ export function SearchableSelect({
   value,
   onChange,
   options,
-  placeholder = "— Chọn —",
-  searchPlaceholder = "Gõ để tìm nhanh…",
+  placeholder = "— Chọn hoặc gõ tìm —",
+  searchPlaceholder = "Gõ tên để lọc nhanh…",
   disabled = false,
   emptyLabel = "Không tìm thấy",
   ariaLabel,
@@ -71,6 +71,11 @@ export function SearchableSelect({
     setQuery("");
   };
 
+  const closeWithoutPick = () => {
+    setOpen(false);
+    setQuery("");
+  };
+
   const displayValue = open ? query : selected?.label ?? "";
 
   return (
@@ -87,18 +92,10 @@ export function SearchableSelect({
           aria-invalid={invalid || undefined}
           aria-describedby={describedBy}
           disabled={disabled}
-          placeholder={open ? searchPlaceholder : selected ? selected.label : placeholder}
+          placeholder={selected ? selected.label : placeholder}
           value={displayValue}
-          readOnly={!open && !!selected}
-          className={`input h-12 w-full rounded-xl pr-10 ${inputInvalidClass(invalid)} ${
-            !open && selected ? "cursor-pointer font-semibold text-ink-900" : ""
-          }`}
+          className={`input h-12 w-full rounded-xl pr-10 ${inputInvalidClass(invalid)}`}
           onFocus={() => {
-            if (disabled) return;
-            setOpen(true);
-            setQuery("");
-          }}
-          onClick={() => {
             if (disabled) return;
             setOpen(true);
             setQuery("");
@@ -109,14 +106,23 @@ export function SearchableSelect({
           }}
           onKeyDown={(e) => {
             if (e.key === "Escape") {
-              setOpen(false);
-              setQuery("");
+              closeWithoutPick();
               inputRef.current?.blur();
             }
-            if (e.key === "Enter" && open && filtered.length === 1) {
+            if (e.key === "ArrowDown" && !open) {
+              setOpen(true);
+            }
+            if (e.key === "Enter" && open && filtered.length >= 1) {
               e.preventDefault();
               pick(filtered[0].value);
             }
+          }}
+          onBlur={() => {
+            window.setTimeout(() => {
+              if (!rootRef.current?.contains(document.activeElement)) {
+                closeWithoutPick();
+              }
+            }, 120);
           }}
         />
         <ChevronDown
@@ -125,6 +131,10 @@ export function SearchableSelect({
           aria-hidden
         />
       </div>
+
+      {!disabled && !selected && !open && (
+        <p className="mt-1 text-xs text-slate-500">{searchPlaceholder}</p>
+      )}
 
       {open && !disabled && (
         <ul

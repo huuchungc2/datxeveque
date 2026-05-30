@@ -15,6 +15,7 @@ import {
   formatDisplayDate,
   formatDisplayDateTime,
   minBookingDepartureParts,
+  nowDepartureParts,
   parseLocalDateTimeParts,
   suggestedBookingDepartureHint,
 } from "../../lib/datetime";
@@ -182,7 +183,8 @@ function CalendarPopup({
   const popupRef = useRef<HTMLDivElement>(null);
   const floatStyle = useFloatingPosition(true, anchorRef, popupRef);
   const today = todayParts();
-  const minDateTime = useMemo(() => (minFromNow ? minBookingDepartureParts() : null), [minFromNow]);
+  const minDateTime = useMemo(() => (minFromNow ? nowDepartureParts() : null), [minFromNow]);
+  const suggestedToday = useMemo(() => (minFromNow ? minBookingDepartureParts() : null), [minFromNow]);
   const cells = useMemo(() => monthMatrix(viewParts.year, viewParts.month), [viewParts.year, viewParts.month]);
   const monthLabel = `Tháng ${pad(viewParts.month)} / ${viewParts.year}`;
   const canGoPrevMonth = !minFromNow || !isBeforeMonthView(viewParts, today);
@@ -211,7 +213,7 @@ function CalendarPopup({
   };
 
   const pickToday = () => {
-    const min = minDateTime ?? { ...today, hour: 6, minute: 0 };
+    const min = suggestedToday ?? minDateTime ?? { ...today, hour: 6, minute: 0 };
     onViewChange({ year: today.year, month: today.month, day: today.day });
     onSelectDay(today.day);
     if (showTime && minFromNow) {
@@ -441,7 +443,7 @@ function DateField({
       minute: selectedParts?.minute ?? viewParts.minute,
     };
     if (minFromNow) {
-      const min = minBookingDepartureParts();
+      const min = nowDepartureParts();
       if (isBeforeDay(next, todayParts())) return;
       if (sameDay(next, todayParts())) {
         next = clampDateTimeParts(next, min);
@@ -455,7 +457,7 @@ function DateField({
     let next = { ...base, ...patch };
     if (!selectedDate) return;
     if (minFromNow) {
-      const min = minBookingDepartureParts();
+      const min = nowDepartureParts();
       if (sameDay(next, todayParts())) {
         next = clampDateTimeParts(next, min);
       }
