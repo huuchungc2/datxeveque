@@ -24,7 +24,7 @@ export function SearchableSelect({
   onChange,
   options,
   placeholder = "— Chọn hoặc gõ tìm —",
-  searchPlaceholder = "Gõ tên để lọc nhanh…",
+  searchPlaceholder = "Chạm ô rồi gõ tên để lọc nhanh",
   disabled = false,
   emptyLabel = "Không tìm thấy",
   ariaLabel,
@@ -51,18 +51,14 @@ export function SearchableSelect({
 
   useEffect(() => {
     if (!open) return;
-    const onDoc = (e: MouseEvent | TouchEvent) => {
+    const onPointerDown = (e: PointerEvent) => {
       if (!rootRef.current?.contains(e.target as Node)) {
         setOpen(false);
         setQuery("");
       }
     };
-    document.addEventListener("mousedown", onDoc);
-    document.addEventListener("touchstart", onDoc);
-    return () => {
-      document.removeEventListener("mousedown", onDoc);
-      document.removeEventListener("touchstart", onDoc);
-    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [open]);
 
   const pick = (next: string) => {
@@ -76,6 +72,13 @@ export function SearchableSelect({
     setQuery("");
   };
 
+  const openForTyping = () => {
+    if (disabled) return;
+    setOpen(true);
+    setQuery("");
+    window.requestAnimationFrame(() => inputRef.current?.focus());
+  };
+
   const displayValue = open ? query : selected?.label ?? "";
 
   return (
@@ -83,7 +86,13 @@ export function SearchableSelect({
       <div className="relative">
         <input
           ref={inputRef}
-          type="text"
+          type="search"
+          enterKeyHint="done"
+          inputMode="search"
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
           role="combobox"
           aria-expanded={open}
           aria-controls={listId}
@@ -92,14 +101,11 @@ export function SearchableSelect({
           aria-invalid={invalid || undefined}
           aria-describedby={describedBy}
           disabled={disabled}
-          placeholder={selected ? selected.label : placeholder}
+          placeholder={placeholder}
           value={displayValue}
-          className={`input h-12 w-full rounded-xl pr-10 ${inputInvalidClass(invalid)}`}
-          onFocus={() => {
-            if (disabled) return;
-            setOpen(true);
-            setQuery("");
-          }}
+          className={`input h-12 w-full touch-manipulation rounded-xl pr-10 !text-base ${inputInvalidClass(invalid)}`}
+          onFocus={openForTyping}
+          onClick={openForTyping}
           onChange={(e) => {
             setQuery(e.target.value);
             if (!open) setOpen(true);
@@ -108,9 +114,6 @@ export function SearchableSelect({
             if (e.key === "Escape") {
               closeWithoutPick();
               inputRef.current?.blur();
-            }
-            if (e.key === "ArrowDown" && !open) {
-              setOpen(true);
             }
             if (e.key === "Enter" && open && filtered.length >= 1) {
               e.preventDefault();
@@ -122,7 +125,7 @@ export function SearchableSelect({
               if (!rootRef.current?.contains(document.activeElement)) {
                 closeWithoutPick();
               }
-            }, 120);
+            }, 180);
           }}
         />
         <ChevronDown
@@ -132,7 +135,7 @@ export function SearchableSelect({
         />
       </div>
 
-      {!disabled && !selected && !open && (
+      {!disabled && (
         <p className="mt-1 text-xs text-slate-500">{searchPlaceholder}</p>
       )}
 
@@ -140,7 +143,7 @@ export function SearchableSelect({
         <ul
           id={listId}
           role="listbox"
-          className="absolute z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg"
+          className="absolute z-[120] mt-1 max-h-56 w-full overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white py-1 shadow-lg"
         >
           {filtered.length === 0 ? (
             <li className="px-3 py-2 text-sm text-slate-500">{emptyLabel}</li>
@@ -149,10 +152,10 @@ export function SearchableSelect({
               <li key={o.value} role="option" aria-selected={o.value === value}>
                 <button
                   type="button"
-                  className={`w-full px-3 py-2.5 text-left text-sm hover:bg-brand-50 ${
+                  className={`w-full px-3 py-3 text-left text-base hover:bg-brand-50 active:bg-brand-100 ${
                     o.value === value ? "bg-brand-50 font-bold text-brand-800" : "text-ink-900"
                   }`}
-                  onMouseDown={(e) => e.preventDefault()}
+                  onPointerDown={(e) => e.preventDefault()}
                   onClick={() => pick(o.value)}
                 >
                   {o.label}
