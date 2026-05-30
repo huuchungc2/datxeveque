@@ -193,14 +193,12 @@ export function minBookingDepartureLocal(): string {
 
 export function suggestedBookingDepartureHint(): string {
   const p = minBookingDepartureParts();
-  return `Gợi ý hôm nay: ${pad(p.hour)}:${pad(p.minute)} (now + 1 giờ). Có thể chọn sớm hơn; xác nhận chỉ chặn giờ quá khứ.`;
+  return `Gợi ý khi mở form: ${pad(p.hour)}:${pad(p.minute)} (now + 1 giờ). Xác nhận đặt không chặn giờ.`;
 }
 
-/** Chuẩn hóa giờ đi: mặc định +1h; nếu quá khứ hôm nay thì clamp về now (không ép +1h). */
+/** Chuẩn hóa giờ đi: trống → gợi ý +1h; còn lại giữ nguyên lựa chọn (không clamp / không chặn). */
 export function resolveBookingScheduledAt(value?: string | null): string {
   if (!value?.trim()) return minBookingDepartureLocal();
-  if (isLocalDateBeforeToday(value)) return value;
-  if (isLocalDateTimeInPast(value)) return nowDepartureLocal();
   return toDatetimeLocalValue(value) || minBookingDepartureLocal();
 }
 

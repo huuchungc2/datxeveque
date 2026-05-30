@@ -164,6 +164,7 @@ type CalendarPopupProps = {
   onClose: () => void;
   showTime?: boolean;
   minFromNow?: boolean;
+  suggestPlus1h?: boolean;
   anchorRef: RefObject<HTMLElement | null>;
 };
 
@@ -178,13 +179,17 @@ function CalendarPopup({
   onClose,
   showTime = true,
   minFromNow = false,
+  suggestPlus1h = false,
   anchorRef,
 }: CalendarPopupProps) {
   const popupRef = useRef<HTMLDivElement>(null);
   const floatStyle = useFloatingPosition(true, anchorRef, popupRef);
   const today = todayParts();
   const minDateTime = useMemo(() => (minFromNow ? nowDepartureParts() : null), [minFromNow]);
-  const suggestedToday = useMemo(() => (minFromNow ? minBookingDepartureParts() : null), [minFromNow]);
+  const suggestedToday = useMemo(
+    () => (minFromNow || suggestPlus1h ? minBookingDepartureParts() : null),
+    [minFromNow, suggestPlus1h]
+  );
   const cells = useMemo(() => monthMatrix(viewParts.year, viewParts.month), [viewParts.year, viewParts.month]);
   const monthLabel = `Tháng ${pad(viewParts.month)} / ${viewParts.year}`;
   const canGoPrevMonth = !minFromNow || !isBeforeMonthView(viewParts, today);
@@ -216,7 +221,7 @@ function CalendarPopup({
     const min = suggestedToday ?? minDateTime ?? { ...today, hour: 6, minute: 0 };
     onViewChange({ year: today.year, month: today.month, day: today.day });
     onSelectDay(today.day);
-    if (showTime && minFromNow) {
+    if (showTime && (minFromNow || suggestPlus1h)) {
       onTimeChange({ hour: min.hour, minute: min.minute });
     }
   };
@@ -307,7 +312,7 @@ function CalendarPopup({
                 {pad(timeParts.hour)}:{pad(timeParts.minute)}
               </span>
             </div>
-            {minFromNow && selectedIsToday && (
+            {(minFromNow || suggestPlus1h) && selectedIsToday && (
               <p className="mt-2 text-xs font-semibold text-brand-800">{suggestedBookingDepartureHint()}</p>
             )}
             <div className="mt-3 grid grid-cols-2 gap-2">
@@ -366,6 +371,7 @@ type DateFieldProps = {
   placeholder: string;
   clearable?: boolean;
   minFromNow?: boolean;
+  suggestPlus1h?: boolean;
   compact?: boolean;
   triggerRef?: React.Ref<HTMLButtonElement>;
   invalid?: boolean;
@@ -380,6 +386,7 @@ function DateField({
   placeholder,
   clearable,
   minFromNow = false,
+  suggestPlus1h = false,
   compact = false,
   triggerRef,
   invalid = false,
@@ -513,6 +520,7 @@ function DateField({
           onClose={() => setOpen(false)}
           showTime={showTime}
           minFromNow={minFromNow}
+          suggestPlus1h={suggestPlus1h}
           anchorRef={anchorRef}
         />
       )}
@@ -526,6 +534,7 @@ type GregorianDateInputProps = {
   className?: string;
   clearable?: boolean;
   minFromNow?: boolean;
+  suggestPlus1h?: boolean;
   compact?: boolean;
 };
 
@@ -556,6 +565,7 @@ type GregorianDateTimeInputProps = {
   onChange: (value: string) => void;
   className?: string;
   minFromNow?: boolean;
+  suggestPlus1h?: boolean;
   compact?: boolean;
   triggerRef?: React.Ref<HTMLButtonElement>;
   invalid?: boolean;
@@ -567,6 +577,7 @@ export function GregorianDateTimeInput({
   onChange,
   className = "",
   minFromNow = false,
+  suggestPlus1h = false,
   compact = false,
   triggerRef,
   invalid,
@@ -581,6 +592,7 @@ export function GregorianDateTimeInput({
       placeholder="Chọn ngày giờ"
       clearable={false}
       minFromNow={minFromNow}
+      suggestPlus1h={suggestPlus1h}
       compact={compact}
       triggerRef={triggerRef}
       invalid={invalid}

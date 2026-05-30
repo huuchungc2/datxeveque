@@ -4,7 +4,6 @@ import { useNavigate } from "react-router-dom";
 import { Car, Box, ShoppingBasket, Users, MapPin, ArrowRightLeft, Calendar } from "lucide-react";
 import { api, unwrapList } from "../lib/api";
 import {
-  isLocalDateBeforeToday,
   minBookingDepartureLocal,
   resolveBookingScheduledAt,
   suggestedBookingDepartureHint,
@@ -81,9 +80,6 @@ export default function HomePage() {
     }
     if (!searchForm.scheduledAt) {
       return markSearchFieldError("scheduledAt", "Vui lòng chọn ngày giờ đi dự kiến.");
-    }
-    if (isLocalDateBeforeToday(searchForm.scheduledAt)) {
-      return markSearchFieldError("scheduledAt", "Không thể chọn ngày trong quá khứ.");
     }
     return true;
   };
@@ -179,7 +175,7 @@ export default function HomePage() {
                   <Calendar size={14} className="text-brand-400" /> Ngày giờ đi
                 </label>
                 <GregorianDateTimeInput
-                  minFromNow
+                  suggestPlus1h
                   compact
                   triggerRef={scheduledAtTriggerRef}
                   invalid={!!fieldErrors.scheduledAt}

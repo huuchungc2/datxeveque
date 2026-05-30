@@ -5,7 +5,7 @@ import { calculatePrice } from "./pricing.js";
 import { assertVnPhone } from "./phone.js";
 import { notifyStaffNewBooking, safeNotify } from "./notifications.js";
 import { resolvePassengerCountForSave, usesPassengerCount } from "./bookingSeats.js";
-import { isZonedDateBeforeToday, parseScheduledAtInput, todayZonedDateValue, toWallClockIso } from "./datetime.js";
+import { parseScheduledAtInput } from "./datetime.js";
 
 const ROUTE_REQUIRED = new Set<BookingType>(["SHARED_RIDE", "PRIVATE_RIDE", "CARGO", "MARKET"]);
 
@@ -103,19 +103,6 @@ export function validateCreateBookingBody(body: CreateBookingBody) {
     throw Object.assign(new Error("Vui lòng chọn ngày giờ đi"), { statusCode: 400 });
   }
   const scheduledAt = parseScheduledAtInput(body.scheduledAt);
-  const chosenDay = toWallClockIso(scheduledAt).slice(0, 10);
-  if (isZonedDateBeforeToday(chosenDay)) {
-    throw Object.assign(
-      new Error("Ngày đi không được là ngày trong quá khứ."),
-      { statusCode: 400 }
-    );
-  }
-  if (chosenDay === todayZonedDateValue() && scheduledAt.getTime() < Date.now() - 60_000) {
-    throw Object.assign(
-      new Error("Giờ đi không được là thời điểm trong quá khứ."),
-      { statusCode: 400 }
-    );
-  }
   const passengerCount = resolvePassengerCountForSave(type, body.passengerCount);
 
   if (type === BookingType.CARGO) {
@@ -245,7 +232,7 @@ export async function createBookingRecord(body: CreateBookingBody) {
         include: { route: true },
         data: { code: generateCode("DX"), ...data },
       });
-      void safeNotify(() => notifyStaffNewBooking(booking));
+      await safeNotify(() => notifyStaffNewBooking(booking));
       return booking;
     } catch (err: any) {
       if (String(err?.code) !== "P2002" || attempt === 4) throw err;

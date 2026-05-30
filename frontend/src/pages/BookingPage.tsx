@@ -8,7 +8,6 @@ import {
 import { api, formatMoney, unwrapList } from "../lib/api";
 import {
   formatDisplayDateTime,
-  isLocalDateBeforeToday,
   minBookingDepartureLocal,
   parseLocalDateTimeParts,
   resolveBookingScheduledAt,
@@ -364,17 +363,10 @@ export default function BookingPage({ type: initType, title: propTitle, defaultR
     return false;
   };
 
-  /** Giờ đi: gợi ý +1h khi trống; xác nhận chỉ clamp quá khứ, không ép +1h. */
+  /** Giờ đi: chỉ bắt đã chọn; không chặn quá khứ / +1h lúc xác nhận. */
   const validateScheduledAt = (deferFocus = false) => {
-    const resolved = resolveBookingScheduledAt(form.scheduledAt);
-    if (!parseLocalDateTimeParts(resolved)) {
+    if (!parseLocalDateTimeParts(form.scheduledAt)) {
       return markFieldError("scheduledAt", "Vui lòng chọn thời gian xuất phát.", deferFocus);
-    }
-    if (isLocalDateBeforeToday(resolved)) {
-      return markFieldError("scheduledAt", "Không thể chọn ngày trong quá khứ.", deferFocus);
-    }
-    if (resolved !== form.scheduledAt) {
-      setForm((f) => ({ ...f, scheduledAt: resolved }));
     }
     return true;
   };
@@ -681,14 +673,14 @@ export default function BookingPage({ type: initType, title: propTitle, defaultR
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Thời gian xuất phát dự kiến</label>
                 <GregorianDateTimeInput
-                  minFromNow
+                  suggestPlus1h
                   triggerRef={scheduledAtTriggerRef}
                   invalid={!!fieldErrors.scheduledAt}
                   aria-describedby={fieldErrors.scheduledAt ? "scheduledAt-err" : undefined}
                   value={form.scheduledAt}
                   onChange={(val) => {
                     clearFieldError("scheduledAt");
-                    setForm({ ...form, scheduledAt: resolveBookingScheduledAt(val) });
+                    setForm({ ...form, scheduledAt: resolveBookingScheduledAt(val) || val });
                   }}
                 />
                 <FieldError id="scheduledAt-err" message={fieldErrors.scheduledAt} />
