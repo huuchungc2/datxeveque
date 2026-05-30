@@ -7,7 +7,7 @@ export function normalizeApiBase(value?: string) {
 /**
  * Dev (Vite): `/api` + proxy.
  * VPS (Nginx cùng domain): khuyên `VITE_API_URL=same-origin` hoặc để trống → `/api`.
- * Khác subdomain: `VITE_API_URL=https://api.tenmien.vn`.
+ * Khác subdomain: `VITE_API_URL=https://api.datxeveque.vn`.
  */
 export function resolveApiBase(): string {
   if (import.meta.env.DEV) {

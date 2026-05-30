@@ -26,6 +26,8 @@ start-local.bat
 
 **Demo:** Admin `0900000000` / `admin123` · Tài xế `0900000001` / `taixe123` · Khách `0900000002` / `khach123`
 
+**VPS production:** domain **https://datxeveque.vn** — chi tiết `deploy/DEPLOY_VPS.md`, Nginx `deploy/nginx-datxeveque.conf`.
+
 **VPS sau import dump local:** `SETUP_SECRET` trong `backend/.env` → `POST /api/setup/reset-admin` (bcrypt admin). Không dùng `hash-plain-passwords.mjs`. Xem `database/README_IMPORT.md`.
 
 ## Định nghĩa xong

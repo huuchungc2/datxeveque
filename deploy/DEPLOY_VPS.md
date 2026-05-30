@@ -1,11 +1,14 @@
 # Deploy lên VPS — Đặt Xe Về Quê
 
+> **Domain production (VPS):** [https://datxeveque.vn](https://datxeveque.vn) · `www.datxeveque.vn`  
+> Mọi `FRONTEND_URL`, `PUBLIC_SITE_URL`, `VITE_SITE_URL` và cookie/CORS trên VPS phải khớp domain này.
+
 Kiến trúc khuyến nghị: **một domain**, Nginx phục vụ web tĩnh + proxy `/api` → Node (PM2) + MySQL.
 
 ```txt
-https://tenmien.vn/          → frontend/dist (React build)
-https://tenmien.vn/api/        → http://127.0.0.1:4002/api/ (Express)
-https://tenmien.vn/uploads/   → thư mục uploads trên VPS
+https://datxeveque.vn/          → frontend/dist (React build)
+https://datxeveque.vn/api/      → http://127.0.0.1:4002/api/ (Express)
+https://datxeveque.vn/uploads/  → thư mục uploads trên VPS
 ```
 
 Cách này **điện thoại và PC đều gọi đúng API** (không dính `localhost`).
@@ -88,7 +91,7 @@ Dump/restore từ local lưu `password_hash` **plain text**. Trên VPS (`NODE_EN
 2. Khởi động API (PM2), rồi:
 
    ```bash
-   curl -s -X POST https://tenmien.vn/api/setup/reset-admin \
+   curl -s -X POST https://datxeveque.vn/api/setup/reset-admin \
      -H "Content-Type: application/json" \
      -d '{"secret":"chuoi-bi-mat-rieng-cua-ban"}'
    ```
@@ -101,7 +104,7 @@ Dump/restore từ local lưu `password_hash` **plain text**. Trên VPS (`NODE_EN
      -d '{}'
    ```
 
-3. Kiểm tra: `curl -s https://tenmien.vn/api/setup/status` → `"bcrypt":true`.
+3. Kiểm tra: `curl -s https://datxeveque.vn/api/setup/status` → `"bcrypt":true`.
 
 4. Đăng nhập: `0900000000` / `admin123`.
 
@@ -143,7 +146,7 @@ cp .env.example .env
 nano .env
 ```
 
-Ví dụ production (thay `tenmien.vn`):
+Production (`backend/.env` trên VPS):
 
 ```env
 NODE_ENV=production
@@ -151,8 +154,8 @@ PORT=4002
 HOST=0.0.0.0
 DATABASE_URL="mysql://dxvq:MAT_KHAU_MANH@127.0.0.1:3306/dat_xe_ve_que?charset=utf8mb4"
 JWT_SECRET="chuoi-ngau-nhien-dai-it-nhat-32-ky-tu"
-FRONTEND_URL=https://tenmien.vn
-PUBLIC_SITE_URL=https://tenmien.vn
+FRONTEND_URL=https://datxeveque.vn
+PUBLIC_SITE_URL=https://datxeveque.vn
 UPLOAD_DIR="../uploads"
 COOKIE_SAMESITE=lax
 SETUP_SECRET="chuoi-bi-mat-rieng-cua-ban"
@@ -190,16 +193,16 @@ nano .env
 
 ```env
 VITE_API_URL=same-origin
-VITE_SITE_URL=https://tenmien.vn
+VITE_SITE_URL=https://datxeveque.vn
 ```
 
 Hoặc:
 
 ```env
-VITE_API_URL=https://tenmien.vn
+VITE_API_URL=https://datxeveque.vn
 ```
 
-(Cả hai đều ra API `https://tenmien.vn/api` — khớp Nginx.)
+(Cả hai đều ra API `https://datxeveque.vn/api` — khớp Nginx.)
 
 ```bash
 npm install
@@ -230,7 +233,7 @@ HTTPS (Let's Encrypt):
 
 ```bash
 sudo apt install certbot python3-certbot-nginx
-sudo certbot --nginx -d tenmien.vn -d www.tenmien.vn
+sudo certbot --nginx -d datxeveque.vn -d www.datxeveque.vn
 ```
 
 ---
@@ -239,10 +242,10 @@ sudo certbot --nginx -d tenmien.vn -d www.tenmien.vn
 
 | URL | Kỳ vọng |
 |-----|---------|
-| `https://tenmien.vn/` | Trang chủ |
-| `https://tenmien.vn/api/health` | JSON `ok` |
-| `https://tenmien.vn/dat-xe` | Form đặt xe, **có danh sách tuyến** |
-| `https://tenmien.vn/admin` | Đăng nhập admin |
+| `https://datxeveque.vn/` | Trang chủ |
+| `https://datxeveque.vn/api/health` | JSON `ok` |
+| `https://datxeveque.vn/dat-xe` | Form đặt xe, **có danh sách tuyến** |
+| `https://datxeveque.vn/admin` | Đăng nhập admin |
 
 Tài khoản demo (đổi mật khẩu sau khi lên production):
 
@@ -299,7 +302,7 @@ cd backend && npm run db:migrate
 |-------------|-------------|------------|
 | Login VPS «sai mật khẩu», local OK | Chưa `reset-admin` sau import | `SETUP_SECRET` + `POST /api/setup/reset-admin` |
 | **Admin/trang trống, «không load dữ liệu»** | DB lỗi / schema lệch / API 502 | Mục **10b** bên dưới |
-| «Không tải được danh sách tuyến» trên mobile | Build còn `VITE_API_URL=http://localhost:4002` | Build lại với `same-origin` hoặc `https://tenmien.vn` |
+| «Không tải được danh sách tuyến» trên mobile | Build còn `VITE_API_URL=http://localhost:4002` | Build lại với `same-origin` hoặc `https://datxeveque.vn` |
 | 502 Bad Gateway `/api` | PM2/API chưa chạy | `pm2 logs`, `curl 127.0.0.1:4002/api/health` |
 | Đăng nhập không giữ session | `FRONTEND_URL` sai hoặc HTTP/HTTPS lẫn | Khớp domain thật, dùng HTTPS |
 | Chữ Việt lỗi trong DB | Import SQL sai encoding | Import UTF-8, `charset=utf8mb4` trong `DATABASE_URL` |
@@ -324,7 +327,7 @@ pm2 logs dat-xe-ve-que-api --lines 40
 | PM2: `DriverBookingCargoStatus not found` | Chưa `prisma generate` sau `git pull` | `cd backend && npm run build && pm2 restart dat-xe-ve-que-api` |
 | `/api/health` → `routeCount: 0` | DB trống tuyến | Import lại `database/dump-*.sql` |
 | `/api/health` 503 | API không vào DB | Xem `detail` trong JSON, sửa MySQL |
-| `curl` localhost OK, web lỗi | Nginx hoặc frontend build sai | `curl https://tenmien.vn/api/health`; build `VITE_API_URL=same-origin` |
+| `curl` localhost OK, web lỗi | Nginx hoặc frontend build sai | `curl https://datxeveque.vn/api/health`; build `VITE_API_URL=same-origin` |
 | Đăng nhập OK nhưng list trống | Lọc **Từ/Đến ngày = hôm nay**, không có đơn/chuyến hôm nay | Đổi khoảng ngày hoặc tạo đơn test |
 
 Thứ tự sửa nhanh:
