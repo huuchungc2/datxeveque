@@ -364,7 +364,7 @@ export default function BookingPage({ type: initType, title: propTitle, defaultR
     return false;
   };
 
-  /** Giờ đi: đã có giá trị hợp lệ thì chỉ clamp (+1h hôm nay), không bắt “chọn lại” ở bước 3. */
+  /** Giờ đi: clamp im lặng nếu chọn quá khứ trong ngày hôm nay. */
   const validateScheduledAt = (deferFocus = false) => {
     const resolved = resolveBookingScheduledAt(form.scheduledAt);
     if (!parseLocalDateTimeParts(resolved)) {

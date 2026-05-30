@@ -110,9 +110,9 @@ export function validateCreateBookingBody(body: CreateBookingBody) {
       { statusCode: 400 }
     );
   }
-  if (chosenDay === todayZonedDateValue() && scheduledAt.getTime() < Date.now() + 60 * 60 * 1000 - 60_000) {
+  if (chosenDay === todayZonedDateValue() && scheduledAt.getTime() < Date.now() - 60_000) {
     throw Object.assign(
-      new Error("Giờ đi hôm nay phải sau giờ hiện tại ít nhất 1 giờ."),
+      new Error("Giờ đi không được là thời điểm trong quá khứ."),
       { statusCode: 400 }
     );
   }

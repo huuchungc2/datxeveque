@@ -3,6 +3,7 @@ import { findDistrict } from "../data/serviceAreaAddress";
 import { inputInvalidClass } from "../lib/formFieldFocus";
 import { regionForPreset, routeAddressPresets, type RouteLike } from "../lib/routeAddress";
 import { FieldError } from "./ui/FieldError";
+import { SearchableSelect } from "./ui/SearchableSelect";
 
 export type RouteAddressValue = {
   endpointKey: string;
@@ -83,43 +84,34 @@ export function RouteAddressField({
       {presets.length > 0 && preset && region ? (
         <div className="space-y-2">
           <div>
-            <select
-              ref={(el) => registerRef?.(districtKey, el)}
-              className={`input h-12 w-full rounded-xl ${inputInvalidClass(!!fieldErrors[districtKey])}`}
+            <SearchableSelect
               value={value.districtId}
-              onChange={(e) => patch({ districtId: e.target.value, wardId: "" }, districtKey)}
-              aria-label="Quận / huyện"
-              aria-invalid={!!fieldErrors[districtKey] || undefined}
-              aria-describedby={fieldErrors[districtKey] ? `${districtKey}-err` : undefined}
-            >
-              <option value="">— Chọn quận / huyện —</option>
-              {region.districts.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
+              onChange={(districtId) => patch({ districtId, wardId: "" }, districtKey)}
+              options={region.districts.map((d) => ({ value: d.id, label: d.name }))}
+              placeholder="— Chọn quận / huyện —"
+              searchPlaceholder="Gõ tên quận / huyện…"
+              ariaLabel="Quận / huyện"
+              invalid={!!fieldErrors[districtKey]}
+              describedBy={fieldErrors[districtKey] ? `${districtKey}-err` : undefined}
+              registerRef={(el) => registerRef?.(districtKey, el)}
+            />
             <FieldError id={`${districtKey}-err`} message={fieldErrors[districtKey]} />
           </div>
 
           <div>
-            <select
-              ref={(el) => registerRef?.(wardKey, el)}
-              className={`input h-12 w-full rounded-xl ${inputInvalidClass(!!fieldErrors[wardKey])}`}
+            <SearchableSelect
               value={value.wardId}
-              onChange={(e) => patch({ wardId: e.target.value }, wardKey)}
+              onChange={(wardId) => patch({ wardId }, wardKey)}
+              options={wards.map((w) => ({ value: w.id, label: w.name }))}
+              placeholder="— Chọn phường / xã —"
+              searchPlaceholder="Gõ tên phường / xã…"
               disabled={!value.districtId}
-              aria-label="Phường / xã"
-              aria-invalid={!!fieldErrors[wardKey] || undefined}
-              aria-describedby={fieldErrors[wardKey] ? `${wardKey}-err` : undefined}
-            >
-              <option value="">— Chọn phường / xã —</option>
-              {wards.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.name}
-                </option>
-              ))}
-            </select>
+              emptyLabel="Không tìm thấy phường / xã"
+              ariaLabel="Phường / xã"
+              invalid={!!fieldErrors[wardKey]}
+              describedBy={fieldErrors[wardKey] ? `${wardKey}-err` : undefined}
+              registerRef={(el) => registerRef?.(wardKey, el)}
+            />
             <FieldError id={`${wardKey}-err`} message={fieldErrors[wardKey]} />
           </div>
 

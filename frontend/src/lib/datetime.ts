@@ -56,13 +56,12 @@ export function buildAppTimeFallback(): AppTimePayload {
   const now = new Date();
   const p = zonedPartsFromInstant(now);
   const today = `${p.year}-${pad(p.month)}-${pad(p.day)}`;
-  const min = new Date(now.getTime() + 60 * 60 * 1000);
-  const mp = zonedPartsFromInstant(min);
+  const wall = `${today}T${pad(p.hour)}:${pad(p.minute)}`;
   return {
     timezone: APP_TIMEZONE,
     today,
-    nowWallClock: `${today}T${pad(mp.hour)}:${pad(mp.minute)}`,
-    minBookingDeparture: `${mp.year}-${pad(mp.month)}-${pad(mp.day)}T${pad(mp.hour)}:${pad(mp.minute)}`,
+    nowWallClock: wall,
+    minBookingDeparture: wall,
   };
 }
 
@@ -162,7 +161,7 @@ function minBookingDepartureWallClock(): string {
 
 export function minBookingDepartureDate(): Date {
   const p = parseLocalDateTimeParts(minBookingDepartureWallClock());
-  return p ? localPartsToDate(p) : new Date(Date.now() + 60 * 60 * 1000);
+  return p ? localPartsToDate(p) : new Date();
 }
 
 export function minBookingDepartureParts(): LocalDateTimeParts {
@@ -176,7 +175,7 @@ export function minBookingDepartureLocal(): string {
 
 export function suggestedBookingDepartureHint(): string {
   const p = minBookingDepartureParts();
-  return `Gợi ý hôm nay: từ ${pad(p.hour)}:${pad(p.minute)} (sau giờ hiện tại 1 giờ, theo giờ hệ thống)`;
+  return `Hôm nay chọn giờ từ ${pad(p.hour)}:${pad(p.minute)} trở đi (không chọn quá khứ, theo giờ hệ thống)`;
 }
 
 export function resolveBookingScheduledAt(value?: string | null): string {
