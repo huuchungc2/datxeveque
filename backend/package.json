@@ -11,6 +11,7 @@
     "test:acceptance": "node scripts/acceptance-test.mjs",
     "db:migrate": "node scripts/migrate.mjs",
     "fix:login": "node scripts/fix-vps-login.mjs",
+    "vps:check": "node scripts/vps-check.mjs",
     "db:seed-test": "node scripts/seed-test-data.mjs",
     "db:seed-vps-demo": "node scripts/seed-vps-demo.mjs",
     "db:reset-minimal": "node scripts/seed-vps-demo.mjs --trim",

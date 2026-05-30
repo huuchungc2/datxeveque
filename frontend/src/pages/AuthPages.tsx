@@ -11,6 +11,28 @@ function redirectByRole(role: string) {
   return dashboardPath(role);
 }
 
+function formatLoginError(err: { response?: { status?: number; data?: unknown } }): string {
+  const status = err.response?.status;
+  const data = err.response?.data;
+  let msg = "";
+  if (typeof data === "object" && data && "message" in data) {
+    msg = String((data as { message?: string }).message || "");
+  } else if (typeof data === "string" && data.trim()) {
+    msg = data.slice(0, 120);
+  }
+  if (!msg) {
+    if (status === 401) msg = "Số điện thoại hoặc mật khẩu không đúng";
+    else if (status === 502 || status === 504) msg = "API không phản hồi (502/504). Kiểm tra PM2: pm2 logs dat-xe-ve-que-api";
+    else if (status === 404) msg = "Không tìm thấy API — kiểm tra Nginx proxy /api/";
+    else if (status === 503) msg = "Không kết nối được database";
+    else msg = "Đăng nhập lỗi";
+  }
+  const hint = err.response
+    ? ` (HTTP ${status ?? "?"}, API: ${API_BASE})`
+    : " — không kết nối được API (kiểm tra Nginx + PM2)";
+  return msg + hint;
+}
+
 function AuthShell({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
   return (
     <div className="app-shell-bg px-4 py-10 md:py-14">
@@ -49,9 +71,7 @@ export function LoginPage() {
       await reload();
       nav(redirectByRole(res.data.user.role));
     }catch(err:any){
-      const msg=err.response?.data?.message||"Đăng nhập lỗi";
-      const hint=err.response?` (API: ${API_BASE})`:" — không kết nối được API";
-      setError(msg+hint);
+      setError(formatLoginError(err));
     }
   };
   return (

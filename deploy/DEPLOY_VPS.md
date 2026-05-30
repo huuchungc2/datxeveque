@@ -298,11 +298,44 @@ cd backend && npm run db:migrate
 | Triệu chứng | Nguyên nhân | Cách xử lý |
 |-------------|-------------|------------|
 | Login VPS «sai mật khẩu», local OK | Chưa `reset-admin` sau import | `SETUP_SECRET` + `POST /api/setup/reset-admin` |
+| **Admin/trang trống, «không load dữ liệu»** | DB lỗi / schema lệch / API 502 | Mục **10b** bên dưới |
 | «Không tải được danh sách tuyến» trên mobile | Build còn `VITE_API_URL=http://localhost:4002` | Build lại với `same-origin` hoặc `https://tenmien.vn` |
 | 502 Bad Gateway `/api` | PM2/API chưa chạy | `pm2 logs`, `curl 127.0.0.1:4002/api/health` |
 | Đăng nhập không giữ session | `FRONTEND_URL` sai hoặc HTTP/HTTPS lẫn | Khớp domain thật, dùng HTTPS |
 | Chữ Việt lỗi trong DB | Import SQL sai encoding | Import UTF-8, `charset=utf8mb4` trong `DATABASE_URL` |
 | Ảnh/upload 404 | Thiếu thư mục hoặc Nginx `uploads` | `mkdir uploads`, kiểm tra `location /uploads/` |
+
+### 10b. Backend VPS không load dữ liệu
+
+Chạy trên VPS (SSH):
+
+```bash
+cd /var/www/dat-xe-ve-que/backend
+npm run vps:check
+curl -s http://127.0.0.1:4002/api/health | head -c 500
+curl -s http://127.0.0.1:4002/api/setup/status
+pm2 logs dat-xe-ve-que-api --lines 40
+```
+
+| Kết quả | Ý nghĩa | Xử lý |
+|---------|---------|--------|
+| `vps:check` FAIL MySQL | `DATABASE_URL` sai / MySQL tắt | Sửa `.env`, `sudo systemctl start mysql` |
+| `Prisma query` / cột không tồn tại | Schema code mới hơn dump | `npm run db:migrate` rồi `pm2 restart dat-xe-ve-que-api` |
+| `/api/health` → `routeCount: 0` | DB trống tuyến | Import lại `database/dump-*.sql` |
+| `/api/health` 503 | API không vào DB | Xem `detail` trong JSON, sửa MySQL |
+| `curl` localhost OK, web lỗi | Nginx hoặc frontend build sai | `curl https://tenmien.vn/api/health`; build `VITE_API_URL=same-origin` |
+| Đăng nhập OK nhưng list trống | Lọc **Từ/Đến ngày = hôm nay**, không có đơn/chuyến hôm nay | Đổi khoảng ngày hoặc tạo đơn test |
+
+Thứ tự sửa nhanh:
+
+```bash
+cd /var/www/dat-xe-ve-que
+git pull
+cd backend && npm install && npx prisma generate && npm run build
+npm run db:migrate
+pm2 restart dat-xe-ve-que-api
+curl -s -X POST http://127.0.0.1:4002/api/setup/reset-admin -H "Content-Type: application/json" -d '{}'
+```
 
 ---
 

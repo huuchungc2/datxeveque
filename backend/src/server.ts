@@ -63,13 +63,31 @@ app.get("/", (_req, res) => res.json({ ok: true, app: "dat-xe-ve-que-api", messa
 app.get("/health", (_req, res) => res.json({ ok: true, app: "dat-xe-ve-que-api" }));
 app.get("/api/health", async (_req, res) => {
   try {
-    const adminCount = await prisma.user.count({ where: { phone: "0900000000", status: "ACTIVE" } });
+    const [adminCount, routeCount, userCount] = await Promise.all([
+      prisma.user.count({ where: { phone: "0900000000", status: "ACTIVE" } }),
+      prisma.route.count(),
+      prisma.user.count(),
+    ]);
     res.json({
       success: true,
-      data: { ok: true, app: "dat-xe-ve-que-api", adminReady: adminCount > 0 },
+      data: {
+        ok: true,
+        app: "dat-xe-ve-que-api",
+        db: true,
+        adminReady: adminCount > 0,
+        routeCount,
+        userCount,
+      },
     });
-  } catch {
-    res.status(503).json({ success: false, message: "Không kết nối được database" });
+  } catch (e: unknown) {
+    const err = e as { message?: string; code?: string };
+    res.status(503).json({
+      success: false,
+      message: "Không kết nối được database",
+      hint: "Kiểm tra DATABASE_URL, mysql, npm run db:migrate",
+      code: err.code,
+      detail: err.message,
+    });
   }
 });
 app.use("/api", apiResponseMiddleware);
