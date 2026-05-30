@@ -159,6 +159,12 @@ export async function notifyDispatchAssigned(input: {
   }
 }
 
+function driverAssignAction(input: { isNewTrip?: boolean; driverOnly?: boolean }) {
+  if (input.isNewTrip) return "Chuyến mới được tạo";
+  if (input.driverOnly) return "Bạn được gán chuyến";
+  return "Được gán thêm khách";
+}
+
 export async function notifyDriverTripAssigned(
   driverId: number,
   input: {
@@ -168,6 +174,8 @@ export async function notifyDriverTripAssigned(
     departureAt?: Date | string | null;
     routeName?: string;
     isNewTrip?: boolean;
+    /** Admin chỉ gán tài xế vào chuyến đã có khách — không gán thêm đơn lúc đó */
+    driverOnly?: boolean;
   }
 ) {
   const driver = await prisma.driver.findUnique({
@@ -178,14 +186,58 @@ export async function notifyDriverTripAssigned(
 
   const when = fmtWhen(input.departureAt);
   const route = input.routeName || "";
-  const action = input.isNewTrip ? "Chuyến mới được tạo" : "Được gán thêm khách";
+  const action = driverAssignAction(input);
   const driverName = driver.name ? ` • Tài xế: ${driver.name}` : "";
+  const guests =
+    input.bookingCount > 0 ? `${input.bookingCount} khách` : "Chờ xác nhận trên app tài xế";
 
   await createForUsers([driver.userId], {
     type: NotificationType.DRIVER_TRIP_ASSIGNED,
     title: `${action}: ${input.tripCode}`,
-    body: `${input.bookingCount} khách${route ? ` • ${route}` : ""} • Khởi hành: ${when}${driverName}`,
-    link: "/tai-xe",
+    body: `${guests}${route ? ` • ${route}` : ""} • Khởi hành: ${when}${driverName}`,
+    link: "/tai-xe/chuyen",
+    entityType: "trip",
+    entityId: input.tripId,
+  });
+}
+
+export async function notifyStaffDriverTripAccepted(input: {
+  tripId: number;
+  tripCode: string;
+  driverName: string;
+  departureAt?: Date | string | null;
+  routeName?: string;
+}) {
+  const when = fmtWhen(input.departureAt);
+  const route = input.routeName || "";
+  const body = `${input.driverName} đã nhận chuyến${route ? ` • ${route}` : ""} • Khởi hành: ${when}`;
+  await createForUsers(await staffUserIds(), {
+    type: NotificationType.DISPATCH_ASSIGNED,
+    title: `Tài xế nhận chuyến ${input.tripCode}`,
+    body,
+    link: "/dispatch",
+    entityType: "trip",
+    entityId: input.tripId,
+  });
+}
+
+export async function notifyStaffDriverTripRejected(input: {
+  tripId: number;
+  tripCode: string;
+  driverName: string;
+  reason?: string;
+  departureAt?: Date | string | null;
+  routeName?: string;
+}) {
+  const when = fmtWhen(input.departureAt);
+  const route = input.routeName || "";
+  const reasonLine = input.reason ? ` • Lý do: ${input.reason}` : "";
+  const body = `${input.driverName} từ chối chuyến${route ? ` • ${route}` : ""} • Khởi hành: ${when}${reasonLine}`;
+  await createForUsers(await staffUserIds(), {
+    type: NotificationType.DISPATCH_ASSIGNED,
+    title: `Tài xế từ chối ${input.tripCode}`,
+    body,
+    link: "/dispatch",
     entityType: "trip",
     entityId: input.tripId,
   });

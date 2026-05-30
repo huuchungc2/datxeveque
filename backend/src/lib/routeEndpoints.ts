@@ -141,21 +141,39 @@ function directionTextToRun(text?: string | null): RunDirection | null {
   return null;
 }
 
-/** Tài xế phải ở đầu tuyến (SG hoặc tỉnh) — không coi vị trí không rõ là khớp mọi chiều */
-export function driverMatchesRun(driver: { location?: string | null; direction?: string | null }, run: RunDirection): boolean {
+export type DriverRouteFields = {
+  routeId?: number | null;
+  runDirection?: string | null;
+  location?: string | null;
+  direction?: string | null;
+};
+
+/** Tài xế chạy mọi tuyến cùng chiều — chỉ so khớp chiều chạy (đơn/chuyến vẫn có routeId riêng). */
+export function driverMatchesBooking(
+  driver: DriverRouteFields,
+  _bookingRouteId: number | null | undefined,
+  run: RunDirection
+): boolean {
+  return driverMatchesRun(driver, run);
+}
+
+/** Tài xế: ưu tiên runDirection đã chọn; không thì suy từ vị trí / chiều text (legacy) */
+export function driverMatchesRun(driver: DriverRouteFields, run: RunDirection): boolean {
+  if (driver.runDirection) return String(driver.runDirection) === run;
   const loc = classifyEndpoint(driver.location);
-  if (loc) {
-    return loc === departureEndpointForRun(run);
-  }
+  if (loc) return loc === departureEndpointForRun(run);
   const fromDir = directionTextToRun(driver.direction);
   return fromDir === run;
 }
 
 export function inferTripRunDirection(trip: {
   tripBookings?: { booking: Record<string, unknown> }[];
-  driver?: { location?: string | null; direction?: string | null } | null;
+  driver?: DriverRouteFields | null;
   route?: { fromName?: string | null; toName?: string | null; direction?: string | null } | null;
 }): RunDirection | null {
+  if (trip.driver?.runDirection === "SG_TO_PROVINCE" || trip.driver?.runDirection === "PROVINCE_TO_SG") {
+    return trip.driver.runDirection as RunDirection;
+  }
   const fromRoute = runDirectionFromRoute(trip.route);
   if (fromRoute) return fromRoute;
 
@@ -195,9 +213,13 @@ export function tripMatchesRun(
 }
 
 export function driverMismatchReason(
-  driver: { name?: string; location?: string | null },
-  run: RunDirection
+  driver: { name?: string; location?: string | null; routeId?: number | null; runDirection?: string | null; route?: { name?: string } | null },
+  run: RunDirection,
+  _bookingRouteId?: number | null
 ): string {
+  if (driver.runDirection && driver.runDirection !== run) {
+    return `Tài xế ${driver.name || ""} chạy ${runDirectionLabel(driver.runDirection as RunDirection)}, đơn cần ${runDirectionLabel(run)}`.trim();
+  }
   const need = endpointLabel(departureEndpointForRun(run));
   const at = driver.location?.trim() || "chưa cập nhật vị trí";
   return `Tài xế ${driver.name || ""} đang ở ${at}, cần tài xế ở ${need}`.trim();
@@ -207,22 +229,28 @@ export function tripMismatchReason(run: RunDirection): string {
   return `Chuyến khác chiều — đơn đi từ ${endpointLabel(departureEndpointForRun(run))}`;
 }
 
-export function driverStateAfterComplete(
-  run: RunDirection,
-  vehicleSeats: number
-): { location: string; direction: string; status: string; seatsFree: number } {
+export function driverStateAfterComplete(run: RunDirection, vehicleSeats: number): {
+  location: string;
+  direction: string;
+  status: string;
+  seatsFree: number;
+  runDirection: RunDirection;
+} {
+  const nextRun: RunDirection = run === "SG_TO_PROVINCE" ? "PROVINCE_TO_SG" : "SG_TO_PROVINCE";
   if (run === "SG_TO_PROVINCE") {
     return {
       location: "Đức Linh / Tánh Linh",
-      direction: "Đức Linh/Tánh Linh → Sài Gòn (Hồ Chí Minh)",
+      direction: runDirectionLabel(nextRun),
       status: "Rảnh",
       seatsFree: vehicleSeats,
+      runDirection: nextRun,
     };
   }
   return {
     location: "Sài Gòn (Hồ Chí Minh)",
-    direction: "Sài Gòn (HCM) → Đức Linh/Tánh Linh",
+    direction: runDirectionLabel(nextRun),
     status: "Rảnh",
     seatsFree: vehicleSeats,
+    runDirection: nextRun,
   };
 }

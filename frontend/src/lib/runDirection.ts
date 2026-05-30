@@ -135,10 +135,27 @@ export function endpointLabel(ep: RouteEndpoint) {
   return ep === "SG" ? "Sài Gòn (HCM)" : "Đức Linh / Tánh Linh";
 }
 
-export function driverMatchesRun(
-  driver: { location?: string | null; direction?: string | null },
+export function runDirectionLabel(run: RunDirection) {
+  return run === "SG_TO_PROVINCE" ? "Sài Gòn → Đức Linh/Tánh Linh" : "Đức Linh/Tánh Linh → Sài Gòn";
+}
+
+export type DriverRouteFields = {
+  routeId?: number | null;
+  runDirection?: string | null;
+  location?: string | null;
+  direction?: string | null;
+};
+
+export function driverMatchesBooking(
+  driver: DriverRouteFields,
+  _bookingRouteId: number | null | undefined,
   run: RunDirection
 ): boolean {
+  return driverMatchesRun(driver, run);
+}
+
+export function driverMatchesRun(driver: DriverRouteFields, run: RunDirection): boolean {
+  if (driver.runDirection) return String(driver.runDirection) === run;
   const loc = classifyEndpoint(driver.location);
   if (loc) return loc === departureEndpointForRun(run);
   return directionTextToRun(driver.direction) === run;
@@ -146,9 +163,12 @@ export function driverMatchesRun(
 
 export function inferTripRunDirection(trip: {
   tripBookings?: { booking: Record<string, unknown> }[];
-  driver?: { location?: string | null; direction?: string | null } | null;
+  driver?: DriverRouteFields | null;
   route?: { fromName?: string | null; toName?: string | null; direction?: string | null } | null;
 }): RunDirection | null {
+  if (trip.driver?.runDirection === "SG_TO_PROVINCE" || trip.driver?.runDirection === "PROVINCE_TO_SG") {
+    return trip.driver.runDirection as RunDirection;
+  }
   const fromRoute = runDirectionFromRoute(trip.route);
   if (fromRoute) return fromRoute;
 
@@ -181,7 +201,14 @@ export function bookingRunDirection(booking: any): RunDirection {
   return inferRunDirectionFromBooking(booking);
 }
 
-export function driverMismatchReason(driver: { name?: string; location?: string | null }, run: RunDirection) {
+export function driverMismatchReason(
+  driver: { name?: string; location?: string | null; routeId?: number | null; runDirection?: string | null; route?: { name?: string } | null },
+  run: RunDirection,
+  bookingRouteId?: number | null
+) {
+  if (driver.runDirection && driver.runDirection !== run) {
+    return `Tài xế ${driver.name || ""} chạy ${runDirectionLabel(driver.runDirection as RunDirection)}, đơn cần ${runDirectionLabel(run)}`.trim();
+  }
   const need = endpointLabel(departureEndpointForRun(run));
   const at = driver.location?.trim() || "chưa cập nhật vị trí";
   return `Tài xế ${driver.name || ""} đang ở ${at}, cần tài xế ở ${need}`.trim();

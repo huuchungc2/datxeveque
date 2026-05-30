@@ -1,7 +1,7 @@
 import type React from "react";
 import { Activity, AlertTriangle, Banknote, Car, CheckCircle2, Clock, Route, Users } from "lucide-react";
 import { formatMoney } from "../../lib/api";
-import { formatShortDate } from "../../lib/datetime";
+import { formatShortDate, parseLocalDateTimeParts } from "../../lib/datetime";
 
 function toNumber(value: unknown) {
   const n = Number(value ?? 0);
@@ -71,15 +71,22 @@ export function StatCard({
 }
 
 export function RevenueTrendChart({ trips }: { trips: any[] }) {
-  const rows = Object.values(
-    (trips || []).reduce((acc: Record<string, any>, t: any) => {
-      const key = formatShortDate(t.departureAt || t.createdAt || new Date());
-      acc[key] ||= { label: key, revenue: 0, commission: 0 };
-      acc[key].revenue += toNumber(t.totalCustomerAmount);
-      acc[key].commission += toNumber(t.adminCommission);
-      return acc;
-    }, {})
-  ).slice(-8) as { label: string; revenue: number; commission: number }[];
+  const buckets = (trips || []).reduce((acc: Record<string, { sortKey: string; label: string; revenue: number; commission: number }>, t: any) => {
+    const at = t.departureAt || t.createdAt;
+    const p = parseLocalDateTimeParts(at) || parseLocalDateTimeParts(new Date());
+    const sortKey = p
+      ? `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`
+      : "0000-00-00";
+    const label = formatShortDate(at || new Date());
+    acc[sortKey] ||= { sortKey, label, revenue: 0, commission: 0 };
+    acc[sortKey].revenue += toNumber(t.totalCustomerAmount);
+    acc[sortKey].commission += toNumber(t.adminCommission);
+    return acc;
+  }, {});
+  const rows = Object.values(buckets)
+    .sort((a, b) => a.sortKey.localeCompare(b.sortKey))
+    .slice(-8)
+    .map(({ label, revenue, commission }) => ({ label, revenue, commission }));
   const data = rows.length ? rows : [{ label: "--/--", revenue: 0, commission: 0 }];
   const max = Math.max(1, ...data.map((x) => x.revenue));
   const points = data.map((x, i) => `${(i / Math.max(1, data.length - 1)) * 100},${92 - (x.revenue / max) * 72}`).join(" ");

@@ -1,6 +1,6 @@
 # Ghi chú logic điều phối — tổng hợp từ hội thoại + hiện trạng code
 
-Tài liệu này ghi lại **logic đang chạy**, **khoảng trống so với spec gửi hàng**, và **hướng sửa dropdown** admin đã thống nhất. Spec sản phẩm gốc: `04_DISPATCH_FLOW_SPEC.md`, gom tiền/ghế: `DISPATCH_SETTLEMENT_LOGIC.md`, gửi hàng: `CAP_NHAT_LOGIC_GUI_HANG_KHONG_TINH_GHE.md`.
+Tài liệu này ghi **logic đang chạy** (cập nhật khi sửa dispatch). Spec gốc: `04_DISPATCH_FLOW_SPEC.md`, tiền/ghế: `DISPATCH_SETTLEMENT_LOGIC.md`, gửi hàng: `CAP_NHAT_LOGIC_GUI_HANG_KHONG_TINH_GHE.md`.
 
 ---
 
@@ -8,206 +8,180 @@ Tài liệu này ghi lại **logic đang chạy**, **khoảng trống so với s
 
 | Khái niệm | Ý nghĩa |
 |-----------|---------|
-| **Booking (đơn)** | Khách đặt; chưa gán khi `tripBookings` rỗng và status thuộc nhóm chờ điều phối |
-| **Trip (chuyến)** | Xe/tuyến/giờ đi; có `driverId`, `bookedSeats`, `availableSeats` |
-| **Gợi ý** | Chỉ là **đề xuất** — **chưa tạo chuyến** cho đến khi admin bấm Xác nhận |
-| **Tài xế** | Gắn với **trip**, không gắn trực tiếp với booking |
+| **Booking (đơn)** | Khách đặt; **còn chờ điều phối** khi `status` ∈ nhóm chờ **và** còn ghế chưa gán (`dispatchSeatRemaining > 0`) |
+| **Trip (chuyến)** | Xe/tuyến/giờ đi; `bookedSeats`, `availableSeats` |
+| **TripBooking** | Liên kết đơn ↔ chuyến; có **`seat_count`** = số ghế của đơn gán **trên chuyến đó** |
+| **Gợi ý** | Đề xuất — chưa ghi DB cho đến khi admin **Xác nhận** |
+| **Tài xế** | Gắn **trip**, không gắn trực tiếp booking |
 
-**1 đơn tại một thời điểm** → thường chỉ thuộc **1 chuyến** (flow UI đang vận hành theo hướng đó).
-
----
-
-## 2. Gợi ý tự động — bao nhiêu gợi ý cho 1 đơn?
-
-- **1 nhóm đơn** (đã gom theo tuyến/ngày/loại) → **tối đa 1 thẻ gợi ý** trên UI.
-- **0 gợi ý** nếu đơn **không có `routeId`**.
-- Loại gợi ý:
-  - **`assign_trip`**: gán vào **chuyến đang gom** (`COLLECTING` / `READY` trong DB; spec gọi `OPEN` / `SCHEDULED`).
-  - **`new_trip`**: **tạo chuyến mới** (+ có thể gán 1 tài xế rảnh) khi không có chuyến phù hợp.
-
-Backend: `buildDispatchSuggestions()` — `backend/src/lib/dispatchSuggestions.ts`  
-Áp dụng: `applyDispatchSuggestion()` — `backend/src/lib/dispatchApply.ts`  
-UI: `frontend/src/pages/AdminDispatch.tsx`
+**Một đơn nhiều ghế** → có thể nằm trên **nhiều chuyến** (nhiều dòng `trip_bookings` khác `trip_id`, cùng `booking_id`). Mỗi lần gán chỉ lấy `min(ghế còn trên đơn, ghế trống chuyến/xe)`.
 
 ---
 
-## 3. Tiêu chí gom đơn trước khi gợi ý
+## 2. Gán ghế từng phần (đã code — 2026-05-29)
 
-Gom nhóm booking chờ theo:
+### Khi nào áp dụng
 
-1. **`routeId`** (bắt buộc)
-2. **Đầu đi** (SG vs Đức Linh/Tánh Linh — suy từ pickup/drop/direction)
-3. **`type`** (loại dịch vụ: `SHARED_RIDE`, `CARGO`, …)
-4. **Ngày** (`scheduledAt`)
+- Đơn chở khách: `passengerCount` = tổng ghế trên đơn.
+- Đơn **10 ghế**, chuyến còn **3 ghế** → lần 1 gán **3**, đơn còn **7** trong cột ①; gán tiếp chuyến khác đến hết.
+- **Không** bắt admin tách đơn thành nhiều booking trong DB (khác spec “tách booking nâng cao” — chưa làm).
 
-Trong cùng ngày:
-
-- Nếu **≥ 2 đơn cùng giờ** → gom theo **bucket giờ**
-- Nếu < 2 đơn/giờ → gom **cả ngày**
-
-Sau đó **tách pack** theo sức chứa xe lớn nhất trong fleet (`packBookingsByVehicleCapacity`).
-
-**`seatsNeeded`** = tổng `bookingSeatUnits()` của các đơn trong pack.
-
----
-
-## 4. Chọn chuyến mặc định (`assign_trip`) — `pickTrip()`
-
-Chỉ xét trip:
-
-- Cùng **`routeId`**
-- **`availableSeats >= seatsNeeded`**
-- **`status` ∈ `COLLECTING`, `READY`**
-
-Nếu nhiều trip đạt, xếp hạng (ưu tiên trước → sau):
-
-1. **Ít dư ghế nhất**: `availableSeats - seatsNeeded` nhỏ nhất (vd. còn đúng 2 ghế cho đơn 2 khách → dư 0, ưu tiên hơn chuyến còn 3 ghế → dư 1)
-2. Trip **đã có `driverId`**
-3. Tài xế **đúng đầu chạy** (location SG/Tỉnh)
-4. **`departureAt`** gần giờ đi gợi ý của nhóm đơn nhất
-
-→ Backend chọn **1 trip “best fit”** làm mặc định (`s.tripId`).
-
----
-
-## 5. Dropdown “Chuyến đích” trên UI (hiện tại)
-
-**Không phải** “gợi ý cho tất cả tài xế rảnh”.
-
-- Dropdown chỉ liệt kê **`collectingTrips`** cùng tuyến và **`availableSeats >= seatsNeeded`** (`tripsForRoute` trong `AdminDispatch.tsx`).
-- Admin **đổi chuyến** trong dropdown → bấm **Xác nhận** → gửi `tripId` đã chọn lên `POST /admin/dispatch/apply` → **vẫn được** (backend check ghế lại).
-- Trip gợi ý mặc định nhưng không nằm trong list (edge case) vẫn được **inject** vào đầu list.
-
-**Ví dụ đã bàn:** cần **2 ghế**, tuyến SG–Đức Linh:
-
-| Nguồn | Còn ghế | Trong dropdown gợi ý `assign_trip`? |
-|-------|---------|-------------------------------------|
-| Chuyến tài xế **A** (đang gom) | 3 | Có |
-| Chuyến tài xế **B** (đang gom) | 1 | **Không** (1 < 2) |
-| Tài xế **C** rảnh | 4 (trên xe, chưa có trip) | **Không** (không phải trip) |
-
-Mặc định: thường chuyến **khít ghế nhất**; nếu chỉ A đủ → gợi ý A, sau gán còn 1 ghế.
-
-**Muốn gán cho tài xế rảnh C (hiện tại):**
-
-1. **Điều phối thủ công** → tick đơn → cột ③ → **“Tạo chuyến”** trên C, hoặc  
-2. Gán vào trip rồi **`PATCH /admin/trips/:id`** đổi `driverId`.
-
----
-
-## 6. Gợi ý `new_trip` + tài xế rảnh
-
-Khi **không có** trip `COLLECTING/READY` đủ ghế:
-
-- 1 gợi ý **`new_trip`**
-- Backend **`pickDriver()`** chọn **một** tài xế rảnh “best fit” (đủ ghế, đúng hướng, xe nhỏ vừa đủ…)
-- UI có dropdown **tài xế** (lọc `driverFitsSeats`) — **không** liệt kê hết mọi tài xế nếu không đủ ghế
-
-Tài xế rảnh: `status = "Rảnh"`, `seatsFree > 0`, **không** có trip `COLLECTING/READY/IN_PROGRESS` (`dispatchDrivers.ts`).
-
----
-
-## 7. Khi admin bấm Xác nhận — update hay tạo mới?
-
-| Loại | Hành vi |
-|------|---------|
-| **`assign_trip`** | **Không** tạo trip mới. Tạo `TripBooking`, update `bookedSeats`/`availableSeats`, tiền trip, `booking.status = ASSIGNED` |
-| **`new_trip`** | **`prisma.trip.create`** rồi gán booking vào trip mới |
-
-**Đổi tài xế sau khi đã gán:** `PATCH /api/admin/trips/:id` (`driverId`, `vehicleId`) — đơn trên chuyến “đi theo” tài xế mới. **Chưa có** API “gỡ đơn khỏi chuyến” / chuyển đơn sang trip khác một bước.
-
-**Chống gán trùng:** cùng `tripId + bookingId` → skip, không cộng ghế/tiền lần 2 (`assignBookingsToTrip`).
-
----
-
-## 8. Tính ghế hiện tại vs spec gửi hàng
-
-**Spec** (`CAP_NHAT_LOGIC_GUI_HANG_KHONG_TINH_GHE.md`):
-
-- `PARCEL` / gửi hàng (**`CARGO`** trong DB): **không tính ghế**
-- Gợi ý gửi hàng **không bắt buộc** còn ghế khách
-- Gán parcel: **không** tăng `bookedSeats`, **không** giảm `availableSeats`
-- Tách doanh thu khách / hàng
-
-**Code hiện tại** (`bookingSeats.ts`):
-
-- `CARGO` / `MARKET`: không nhập `passengerCount` nhưng **`bookingSeatUnits()` = 1** → vẫn **trừ 1 ghế** khi gán
-- Gợi ý & gán đều check `availableSeats >= seatsNeeded`
-- Trip không tách `passengerRevenue` / `parcelRevenue`
-
-→ **Chưa khớp spec gửi hàng**; cần sửa riêng khi triển khai `CAP_NHAT_...`.
-
----
-
-## 9. Hướng sửa đã nêu — dropdown thống nhất `dispatchOptions`
-
-**Mục tiêu (admin yêu cầu, chưa code xong):**
-
-Mỗi gợi ý / booking cần dropdown **một list chung**, gồm:
-
-1. **Chuyến đang gom** (existing trip) — đủ/không đủ điều kiện  
-2. **Tài xế rảnh** (tạo chuyến mới khi chọn) — đủ/không đủ điều kiện  
-3. Mục **không đủ điều kiện**: **disabled**, xuống cuối, có **lý do**
-
-Admin chọn **1 option** → **Xác nhận điều phối** → backend tự:
-
-- `existing_trip` → gán vào trip (`add-bookings` / `assign_trip`)
-- `new_driver` → tạo trip + gán (`new_trip`)
-
-**Điều kiện dự kiến (chở khách):**
+### Công thức
 
 ```txt
-eligible = trip.availableSeats >= booking.requiredSeats
-         = driver.vehicle.seats >= requiredSeats (và seatsFree / không bận)
+bookingSeatUnits(booking)     = passengerCount (xe khách) | 1 (CARGO/MARKET — 1 đơn)
+bookingAssignedSeatUnits      = SUM(trip_bookings.seat_count) của đơn
+bookingRemainingSeatUnits     = bookingSeatUnits - assigned
+
+Mỗi lần gán:
+  seatsToAssign = min(remaining, trip.availableSeats [, seatCounts[id] nếu client gửi])
 ```
 
-**Parcel (`CARGO`):** theo spec — **không** check ghế (cần chốt khi implement).
+### Trạng thái đơn sau gán
 
-**Mapping trạng thái trip:** spec `OPEN/SCHEDULED` ≈ code `COLLECTING/READY`; `IN_PROGRESS/COMPLETED/CANCELLED` không gợi ý nhận thêm (trừ khi nghiệp vụ cho phép hàng trên chuyến đang chạy).
+| Tình huống | `booking.status` |
+|------------|------------------|
+| Còn ghế chưa gán | `WAITING_DISPATCH` (vẫn trong hàng chờ điều phối) |
+| Đã gán hết ghế | `ASSIGNED` (+ `driverRideStatus` / `driverCargoStatus` nếu trống) |
+
+### Tiền / HH trên chuyến
+
+- Mỗi lần gán: `rollupBookingFinancialsPortion(booking, seatsToAssign, bookingSeatUnits)` — chia tỷ lệ `seatsToAssign / tổng ghế đơn`.
+- Chốt chuyến (`tripComplete.ts`): cộng tiền theo **từng** `trip_bookings.seat_count`, không nhân full đơn.
+
+### Chống trùng
+
+- Unique `(trip_id, booking_id)`: **một dòng** đơn ↔ chuyến; gán lại cùng chuyến → skip.
+- Gán **chuyến khác** khi còn ghế → tạo dòng `trip_bookings` mới.
+
+### API
+
+| Endpoint | Ghi chú |
+|----------|---------|
+| `GET /api/admin/dispatch` | Đơn chờ = filter `bookingNeedsDispatch`; trả `dispatchSeatTotal/Assigned/Remaining` |
+| `POST /api/admin/dispatch/apply` | Body có thể có `seatCounts: { "bookingId": n }` |
+| `POST /api/admin/trips/:id/add-bookings` | `{ bookingIds, seatCounts? }` — không gửi thì auto `min(remaining, avail)` |
+| `GET /api/admin/dispatch/bookings/:id/options` | Options theo **ghế còn** đơn |
+| `POST /api/admin/dispatch/bookings/:id/confirm` | Gửi `seatsAssignable` từ option đã chọn |
+
+### UI (`AdminDispatch.tsx`)
+
+- Chọn đơn → cột ② + dropdown chuyến: **≥ 1 ghế**, **cùng `routeId` đơn** + cùng chiều. Cột ③ / tài xế: **cùng chiều** (`runDirection`), **mọi tuyến** (không lọc `driver.routeId`).
+- Nút: `Gán 3/10 ghế lần này`; thẻ đơn: `7/10 ghế còn gán`.
+- `computeAssignSeatCounts()` (frontend) và `buildDispatchOptionsForSuggestion()` (backend) đồng bộ logic chia ghế.
+
+### DB
+
+- Cột `trip_bookings.seat_count` (migration `trip_bookings_seat_count` trong `backend/scripts/migrate.mjs`).
+- Backfill: bản ghi cũ = `passenger_count` (hoặc 1 với CARGO/MARKET).
 
 ---
 
-## 10. File code liên quan
+## 3. Gợi ý tự động
+
+- **1 pack** (gom tuyến/đầu đi/loại/ngày) → **1 thẻ gợi ý**; không có tuyến → 0 gợi ý.
+- Loại: `assign_trip` (chuyến `COLLECTING`/`READY`) | `new_trip` (tạo chuyến + tài xế rảnh).
+- **`seatsNeeded`** trên gợi ý = tổng **ghế còn gán** trong pack (`bookingRemainingSeatUnits`), không phải tổng `passengerCount` gốc nếu đã gán một phần.
+- `pickTrip`: chuyến còn `availableSeats > 0` (không cần ≥ full pack); ưu tiên chuyến gán **đủ** pack một lần, rồi ít dư ghế.
+- `packBookingsByVehicleCapacity`: đơn 1 ghế > cap fleet → pack riêng; gán nhiều lần qua UI/API.
+
+Backend: `dispatchSuggestions.ts` · Apply: `dispatchApply.ts` · Options dropdown: `dispatchOptions.ts`
+
+---
+
+## 4. Dropdown phương án (`dispatchOptions`)
+
+Mỗi gợi ý có `dispatchOptions[]` (chỉ **eligible** trên UI):
+
+1. **`existing_trip`** — chuyến đang gom (`trip:ID`)
+2. **`available_driver`** — tạo chuyến mới (`driver:ID`)
+
+Trường quan trọng:
+
+- `seatsNeeded` — ghế còn cần gán (cả nhóm đơn trong gợi ý)
+- `seatsAssignable` — ghế gán **lần này** nếu chọn option (`min(seatsNeeded, avail xe/chuyến)`)
+- Label ví dụ: `gán 3/10 ghế lần này`
+
+Xác nhận gợi ý → `POST /dispatch/apply` kèm `seatCounts` build từ `seatsAssignable`.
+
+---
+
+## 5. Điều phối thủ công (3 cột)
+
+| Cột | Nguồn | Khi đã chọn đơn |
+|-----|--------|-----------------|
+| ① Đơn chưa gán | `unassignedBookings` | Checkbox; hiện `dispatchSeatRemaining` |
+| ② Chuyến | `collectingTrips` | Mọi chuyến còn ≥1 ghế, **cùng tuyến đơn** + chiều |
+| ③ Tài xế rảnh | `availableDrivers` | Mọi tài có xe, **đúng chiều** (mọi tuyến); tạo chuyến gán phần theo `seats` xe |
+
+Gán: `POST /trips/:id/add-bookings` với `seatCounts` tính từ `computeAssignSeatCounts`.
+
+---
+
+## 6. Gom đơn trước gợi ý
+
+1. `routeId` (bắt buộc)
+2. Đầu đi (SG / Tỉnh — `routeEndpoints.ts`)
+3. `type` (không trộn loại dịch vụ)
+4. Ngày `scheduledAt` — ≥2 đơn cùng giờ → bucket giờ; ít hơn → gom cả ngày
+
+Sau đó `packBookingsByVehicleCapacity` theo xe lớn nhất trong fleet.
+
+---
+
+## 7. Chuyến / tài xế được phép nhận thêm
+
+| Trạng thái chuyến | Gợi ý / gán thêm? |
+|-------------------|-------------------|
+| `COLLECTING`, `READY` | **Có** |
+| `IN_PROGRESS` | **Không** — đã chạy |
+| `COMPLETED`, `CANCELLED` | **Không** |
+
+Tài xế rảnh: `dispatchDrivers.ts` — `Rảnh`, có xe, không trip `COLLECTING`/`READY`/`IN_PROGRESS` khi **tạo chuyến mới**.
+
+---
+
+## 8. Gửi hàng (`CARGO`) — chưa khớp spec
+
+**Spec** (`CAP_NHAT_LOGIC_GUI_HANG_KHONG_TINH_GHE.md`): gửi hàng không tính ghế khách.
+
+**Code hiện tại** (`backend/src/lib/bookingSeats.ts`):
+
+- `CARGO`/`MARKET`: `bookingSeatUnits() = 1` (một “đơn” = 1 slot), gán một lần là xong.
+- Chưa tách `passengerRevenue` / `parcelRevenue` trên trip.
+
+---
+
+## 9. Chuyển chuyến (`bookingMoveTrip.ts`)
+
+- Chuyển theo **`seat_count`** trên link nguồn (tiền/ghế prorate tương ứng).
+- Nếu sau khi gỡ nguồn đơn còn link khác hoặc còn ghế → có thể `WAITING_DISPATCH`.
+
+---
+
+## 10. File code
 
 | File | Vai trò |
 |------|---------|
-| `backend/src/lib/dispatchSuggestions.ts` | Gom đơn, `pickTrip`, `pickDriver`, build suggestions |
-| `backend/src/lib/dispatchApply.ts` | Gán / tạo trip |
+| `backend/src/lib/bookingSeats.ts` | `bookingSeatUnits`, `bookingRemainingSeatUnits`, `bookingNeedsDispatch` |
+| `backend/src/lib/settlement.ts` | `rollupBookingFinancialsPortion` |
+| `backend/src/lib/dispatchApply.ts` | `assignBookingsToTrip`, `createTripAndAssign`, `seatCounts` |
+| `backend/src/lib/dispatchOptions.ts` | `buildDispatchOptionsForSuggestion`, `enrichBookingDispatchSeats` |
+| `backend/src/lib/dispatchSuggestions.ts` | Gom pack, `pickTrip`, `pickDriver` |
 | `backend/src/lib/dispatchDrivers.ts` | Tài xế rảnh / bận |
-| `backend/src/lib/bookingSeats.ts` | `bookingSeatUnits`, CARGO=1 chỗ |
-| `backend/src/routes/admin.ts` | `GET /admin/dispatch`, `POST /dispatch/apply` |
-| `frontend/src/pages/AdminDispatch.tsx` | UI gợi ý + dropdown override + thủ công 3 cột |
+| `backend/src/routes/admin.ts` | `/dispatch`, `/dispatch/apply`, `/trips/:id/add-bookings` |
+| `frontend/src/lib/bookingSeats.ts` | `computeAssignSeatCounts`, nhãn còn gán |
+| `frontend/src/pages/AdminDispatch.tsx` | UI 3 cột + gợi ý |
+| `frontend/GHI_CHU_LOGIC.md` | Tóm tắt UI điều phối |
 
 ---
 
-## 11. Đã chốt nghiệp vụ (admin, 2026-05-27)
+## 11. Việc chưa làm (spec / sau)
 
-### Dropdown / gợi ý theo đơn hay theo nhóm?
-
-- **Hiện tại:** theo **thẻ gợi ý** (gom nhiều đơn trong 1 pack). Chưa có màn “mở 1 booking → list riêng”.
-
-### Chuyến nào được đưa vào phương án điều phối?
-
-| Trạng thái chuyến | Nhãn UI | Được gợi ý / dropdown? |
-|-------------------|---------|-------------------------|
-| `COLLECTING` | Đang gom khách | **Có** — chưa chạy |
-| `READY` | Sẵn sàng chạy | **Có** — chưa chạy |
-| `IN_PROGRESS` | Đang chạy | **Không** — đã chạy, **bỏ qua hẳn** |
-| `COMPLETED` / `CANCELLED` | Xong / Hủy | **Không** |
-
-- **Admin không được cố gán** vào chuyến `IN_PROGRESS` (không có option, không override).
-- Rule này áp dụng **cả chở khách và gửi hàng** — không tách ngoại lệ “chuyến đang chạy vẫn nhận hàng”.
-
-### Gửi hàng (`CARGO`) — ghế vs trạng thái chuyến
-
-- **Trạng thái chuyến:** như bảng trên (chỉ chưa chạy).
-- **Ghế:** theo spec `CAP_NHAT_LOGIC_GUI_HANG_KHONG_TINH_GHE.md` — gửi hàng **không tính ghế** (code hiện tại vẫn tính 1 ghế → cần sửa riêng).
-- Chuyến **FULL ghế khách** nhưng `COLLECTING`/`READY`: vẫn có thể là phương án gửi hàng sau khi sửa logic ghế (không liên quan `IN_PROGRESS`).
-
-### `IN_PROGRESS` là gì?
-
-Tài xế đã bấm **Bắt đầu** — chuyến **đang chạy trên đường**. Không còn coi là “ở đầu tuyến / đang gom” để nhận thêm đơn qua điều phối.
+- Tách booking thành nhiều đơn con + `parentBookingId` (SPEC admin 2.9).
+- Gửi hàng không trừ `availableSeats` (CAP_NHAT).
+- Hiển thị lịch sử “đơn X: 3 ghế chuyến A, 7 ghế chuyến B” trên admin chi tiết đơn (UI).
 
 ---
 
-*Cập nhật: 2026-05-27 — từ hội thoại Cursor + đọc code hiện tại.*
+*Cập nhật: 2026-05-29 — tài xế điều phối theo **chiều chạy** (mọi tuyến); đơn/chuyến vẫn theo `routeId`. Gán ghế từng phần, `trip_bookings.seat_count`.*

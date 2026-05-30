@@ -47,6 +47,7 @@ Pass các luồng lõi trong `12_ACCEPTANCE_TEST_FULL.md`, đặc biệt: guest 
 | `frontend/src/components/Layout.tsx` | Accordion mobile/desktop; `adminNav` 3 nhóm |
 | `frontend/src/lib/vi.ts` | Nhãn tiếng Việt cho enum — dùng helper, không show raw status |
 | `DISPATCH_SETTLEMENT_LOGIC.md` | Gom chuyến, ghế, công nợ (backend) |
+| `DISPATCH_GHI_CHU_LOGIC.md` | **Điều phối chi tiết:** gán ghế từng phần, `seat_count`, dropdown, API, trạng thái đơn |
 | `TELEGRAM_SETUP.md` | Bot + nhóm Telegram, biến `.env`, sự kiện báo |
 
 **Menu mobile:** đóng mặc định → bấm ☰ → bấm từng nhóm mới bung; chỉ **một** nhóm mở; đổi route thì đóng panel.

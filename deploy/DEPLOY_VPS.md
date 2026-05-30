@@ -107,6 +107,32 @@ Dump/restore từ local lưu `password_hash` **plain text**. Trên VPS (`NODE_EN
 
 Script `fix-vps-login.mjs` / `hash-plain-passwords.mjs` chỉ dùng khi khẩn cấp, không phải quy trình chuẩn.
 
+### Chỉ giữ 1 admin + 2 tài xế demo (khuyến nghị VPS)
+
+Sau import dump (có thể kèm 20+ tài xế từ local), trên VPS:
+
+```bash
+cd /var/www/dat-xe-ve-que/backend
+npm run db:migrate
+npm run db:seed-vps-demo -- --trim
+curl -s -X POST http://127.0.0.1:4002/api/setup/reset-admin \
+  -H "Content-Type: application/json" -d '{}'
+```
+
+| Vai trò | SĐT | Mật khẩu |
+|---------|-----|----------|
+| Admin | `0900000000` | `admin123` |
+| Tài xế 1 (SG) | `0900000001` | `taixe123` |
+| Tài xế 2 (tỉnh) | `0900000004` | `taixe123` |
+
+`--trim` xóa đơn/chuyến và tài xế không thuộc 3 SĐT trên; giữ tuyến, giá, cài đặt site. **Đổi mật khẩu** trước khi mở production thật.
+
+Không dùng `--trim` nếu chỉ cần bcrypt lại 3 tài khoản mà không xóa dữ liệu:
+
+```bash
+npm run db:seed-vps-demo
+```
+
 ---
 
 ## 4. Backend `.env`
@@ -221,7 +247,8 @@ sudo certbot --nginx -d tenmien.vn -d www.tenmien.vn
 Tài khoản demo (đổi mật khẩu sau khi lên production):
 
 - Admin `0900000000` / `admin123`
-- Tài xế `0900000001` / `taixe123`
+- Tài xế 1 `0900000001` / `taixe123`
+- Tài xế 2 `0900000004` / `taixe123` (sau `db:seed-vps-demo`)
 
 ---
 

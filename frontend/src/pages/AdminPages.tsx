@@ -4,6 +4,7 @@ import { fmtDepartureTime, formatDisplayDate } from "../lib/datetime";
 import { SERVICE_TYPE_OPTIONS } from "../lib/serviceTypes";
 import { useSiteSettings } from "../lib/useSiteSettings";
 import { normalizeVnPhone, PHONE_INVALID_MESSAGE, phoneInputProps, sanitizePhoneInput } from "../lib/phone";
+import { runDirectionLabel, type RunDirection } from "../lib/runDirection";
 import { DriverDebtChart, OccupancyChart, PageTitle, RevenueTrendChart, RouteRevenueChart, StatCard, StatusDonutChart, dashboardIcons } from "../components/ui/AdminCharts";
 import { GregorianDateInput } from "../components/ui/GregorianDateInputs";
 import {
@@ -14,6 +15,12 @@ import {
   userStatus,
   settingKey,
 } from "../lib/vi";
+import {
+  AdminResetPasswordModal,
+  adminResetUserPassword,
+  validateAdminNewPassword,
+  type ResetPasswordTarget,
+} from "../components/admin/AdminResetPasswordModal";
 
 export function AdminDashboard() {
   const [dash, setDash] = useState<any>();
@@ -142,6 +149,7 @@ const emptyUserForm = () => ({
   status: "ACTIVE",
   zaloPhone: "",
   driverStatus: "Rảnh",
+  runDirection: "" as "" | RunDirection,
   location: "",
   direction: "",
   seatsFree: 0,
@@ -164,6 +172,11 @@ function userToForm(u: any) {
     status: u.status ?? base.status,
     zaloPhone: u.driver?.zaloPhone ?? u.customer?.zaloPhone ?? "",
     driverStatus: u.driver?.status ?? base.driverStatus,
+    runDirection: (
+      u.driver?.runDirection === "SG_TO_PROVINCE" || u.driver?.runDirection === "PROVINCE_TO_SG"
+        ? u.driver.runDirection
+        : ""
+    ) as "" | RunDirection,
     location: u.driver?.location ?? "",
     direction: u.driver?.direction ?? "",
     seatsFree: Number(u.driver?.seatsFree ?? 0),
@@ -177,12 +190,18 @@ function userToForm(u: any) {
 const DRIVER_STATUS_OPTIONS = ["Rảnh", "Bận", "Đang chạy chuyến", "Nghỉ hôm nay"];
 
 export function AdminUsers() {
+  const [routes, setRoutes] = useState<{ id: number; name: string; direction?: string }[]>([]);
   const [items, setItems] = useState<any[]>([]);
   const [f, setF] = useState<any>({});
   const [form, setForm] = useState(emptyUserForm);
   const [editId, setEditId] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [resetTarget, setResetTarget] = useState<ResetPasswordTarget | null>(null);
+  const [pwNew, setPwNew] = useState("");
+  const [pwConfirm, setPwConfirm] = useState("");
+  const [pwError, setPwError] = useState("");
+  const [pwSaving, setPwSaving] = useState(false);
 
   const isNew = creating && editId === null;
   const showForm = creating || editId !== null;
@@ -191,12 +210,16 @@ export function AdminUsers() {
 
   useEffect(() => {
     load();
+    api.get("/admin/routes").then((r) => setRoutes(Array.isArray(r.data) ? r.data : r.data?.items || []));
   }, []);
 
   const resetForm = () => {
     setForm(emptyUserForm());
     setEditId(null);
     setCreating(false);
+    setPwNew("");
+    setPwConfirm("");
+    setPwError("");
   };
 
   const startCreate = () => {
@@ -232,8 +255,10 @@ export function AdminUsers() {
 
     if (form.role === "DRIVER") {
       payload.driverStatus = form.driverStatus;
-      payload.location = form.location.trim() || null;
-      payload.direction = form.direction.trim() || null;
+      if (!form.runDirection) {
+        throw new Error("Tài xế cần chọn chiều chạy");
+      }
+      payload.runDirection = form.runDirection;
       payload.seatsFree = Number(form.seatsFree);
       if (isNew) {
         payload.vehicleType = form.vehicleType.trim() || null;
@@ -273,14 +298,28 @@ export function AdminUsers() {
     }
   };
 
-  const resetPassword = async (id: number) => {
-    const p = prompt("Mật khẩu mới (tối thiểu 6 ký tự)", "123456");
-    if (!p) return;
+  const openResetPassword = (u: { id: number; name?: string; phone?: string }) => {
+    setResetTarget({ userId: u.id, label: `${u.name || "—"} · ${u.phone || ""}` });
+  };
+
+  const savePasswordInForm = async () => {
+    if (!editId) return;
+    const err = validateAdminNewPassword(pwNew, pwConfirm);
+    if (err) {
+      setPwError(err);
+      return;
+    }
+    setPwSaving(true);
+    setPwError("");
     try {
-      await api.post(`/admin/users/${id}/reset-password`, { password: p });
+      await adminResetUserPassword(editId, pwNew);
+      setPwNew("");
+      setPwConfirm("");
       alert("Đã đặt lại mật khẩu");
     } catch (e: any) {
-      alert(e.response?.data?.message || "Không đổi được mật khẩu");
+      setPwError(e.response?.data?.message || "Không đổi được mật khẩu");
+    } finally {
+      setPwSaving(false);
     }
   };
 
@@ -371,6 +410,44 @@ export function AdminUsers() {
               </label>
             )}
 
+            {!isNew && editId && (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 md:col-span-2">
+                <p className="text-sm font-bold text-slate-800">Đổi mật khẩu đăng nhập</p>
+                <p className="mt-1 text-xs text-slate-500">Chỉ admin — mật khẩu được mã hóa trên máy chủ, không hiển thị lại sau khi lưu.</p>
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <label className="text-sm font-semibold">
+                    Mật khẩu mới
+                    <input
+                      className="input mt-1"
+                      type="password"
+                      autoComplete="new-password"
+                      minLength={6}
+                      value={pwNew}
+                      onChange={(e) => setPwNew(e.target.value)}
+                    />
+                  </label>
+                  <label className="text-sm font-semibold">
+                    Nhập lại mật khẩu
+                    <input
+                      className="input mt-1"
+                      type="password"
+                      autoComplete="new-password"
+                      value={pwConfirm}
+                      onChange={(e) => setPwConfirm(e.target.value)}
+                    />
+                  </label>
+                </div>
+                {pwError && (
+                  <p className="mt-2 text-sm font-semibold text-red-700" role="alert">
+                    {pwError}
+                  </p>
+                )}
+                <button type="button" className="btn-secondary mt-3" disabled={pwSaving} onClick={savePasswordInForm}>
+                  {pwSaving ? "Đang lưu…" : "Cập nhật mật khẩu"}
+                </button>
+              </div>
+            )}
+
             {isStaff && (
               <p className="text-sm text-slate-600 md:col-span-2">
                 Tài khoản nhân viên: đăng nhập bằng SĐT + mật khẩu, vào khu vực quản trị theo quyền.
@@ -399,14 +476,26 @@ export function AdminUsers() {
                     ))}
                   </select>
                 </label>
-                <label className="text-sm font-semibold">
-                  Vị trí hiện tại
-                  <input className="input mt-1" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+                <label className="text-sm font-semibold md:col-span-2">
+                  Chiều chạy (mọi tuyến) <span className="text-red-600">*</span>
+                  <select
+                    className="input mt-1"
+                    value={form.runDirection}
+                    onChange={(e) =>
+                      setForm({ ...form, runDirection: e.target.value as typeof form.runDirection })
+                    }
+                  >
+                    <option value="">— Chọn chiều —</option>
+                    <option value="SG_TO_PROVINCE">Sài Gòn → Đức Linh / Tánh Linh</option>
+                    <option value="PROVINCE_TO_SG">Đức Linh / Tánh Linh → Sài Gòn</option>
+                  </select>
                 </label>
-                <label className="text-sm font-semibold">
-                  Chiều / khu vực nhận
-                  <input className="input mt-1" value={form.direction} onChange={(e) => setForm({ ...form, direction: e.target.value })} />
-                </label>
+                {form.runDirection && (
+                  <p className="md:col-span-2 text-sm text-slate-600">
+                    {runDirectionLabel(form.runDirection)}
+                    {form.location ? ` · Vị trí: ${form.location}` : ""}
+                  </p>
+                )}
                 <label className="text-sm font-semibold">
                   Ghế trống báo
                   <input
@@ -503,6 +592,14 @@ export function AdminUsers() {
         </button>
       </div>
 
+      {resetTarget && (
+        <AdminResetPasswordModal
+          target={resetTarget}
+          onClose={() => setResetTarget(null)}
+          onSuccess={(message) => alert(message)}
+        />
+      )}
+
       <div className="mt-5 grid gap-3">
         {items.map((u) => (
           <div
@@ -530,7 +627,7 @@ export function AdminUsers() {
               <button type="button" className="btn-secondary py-2" onClick={() => toggleLock(u)}>
                 {u.status === "ACTIVE" ? "Khóa" : "Mở khóa"}
               </button>
-              <button type="button" className="btn-primary py-2" onClick={() => resetPassword(u.id)}>
+              <button type="button" className="btn-primary py-2" onClick={() => openResetPassword(u)}>
                 Đặt lại MK
               </button>
             </div>
@@ -542,14 +639,52 @@ export function AdminUsers() {
   );
 }
 
+type ReportFilters = {
+  from?: string;
+  to?: string;
+  driverId?: string;
+  routeId?: string;
+  serviceType?: string;
+};
+
+function reportFilterParams(f: ReportFilters): Record<string, string> {
+  const params: Record<string, string> = {};
+  if (f.from?.trim()) params.from = f.from.trim();
+  if (f.to?.trim()) params.to = f.to.trim();
+  if (f.driverId?.trim()) params.driverId = f.driverId.trim();
+  if (f.routeId?.trim()) params.routeId = f.routeId.trim();
+  if (f.serviceType?.trim()) params.serviceType = f.serviceType.trim();
+  return params;
+}
+
 export function AdminReports() {
   const [r, setR] = useState<any>();
-  const [f, setF] = useState<any>({});
+  const [f, setF] = useState<ReportFilters>({});
   const [routes, setRoutes] = useState<any[]>([]);
-  const load = () => api.get("/admin/reports/overview", { params: f }).then((x) => setR(x.data));
+  const [drivers, setDrivers] = useState<{ id: number; name: string }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+  const load = async (next?: ReportFilters) => {
+    const params = reportFilterParams(next ?? f);
+    setLoading(true);
+    setErr(null);
+    try {
+      const x = await api.get("/admin/reports/overview", { params });
+      setR(x.data);
+    } catch (e: any) {
+      setErr(e?.message || "Không tải được báo cáo");
+    } finally {
+      setLoading(false);
+    }
+  };
   useEffect(() => {
     load();
-    api.get("/admin/routes").then((x) => setRoutes(x.data));
+    api.get("/admin/routes").then((x) => setRoutes(Array.isArray(x.data) ? x.data : []));
+    api.get("/admin/drivers").then((x) => {
+      const data = x.data;
+      const list = Array.isArray(data) ? data : data?.items || [];
+      setDrivers(list.map((d: any) => ({ id: d.id, name: d.name || d.user?.name || `TX #${d.id}` })));
+    });
   }, []);
   const trips = r?.trips || [];
   return (
@@ -558,16 +693,28 @@ export function AdminReports() {
       <div className="card grid gap-3 md:grid-cols-6">
         <GregorianDateInput value={f.from || ""} onChange={(value) => setF({ ...f, from: value })} />
         <GregorianDateInput value={f.to || ""} onChange={(value) => setF({ ...f, to: value })} />
-        <input className="input" placeholder="Mã tài xế" onChange={(e) => setF({ ...f, driverId: e.target.value })} />
-        <select className="input" onChange={(e) => setF({ ...f, routeId: e.target.value })}><option value="">Tất cả tuyến</option>{routes.map((rt) => <option key={rt.id} value={rt.id}>{rt.name}</option>)}</select>
-        <select className="input" onChange={(e) => setF({ ...f, serviceType: e.target.value || undefined })}>
-          <option value="">Dịch vụ</option>
+        <select className="input" value={f.driverId || ""} onChange={(e) => setF({ ...f, driverId: e.target.value })}>
+          <option value="">Tất cả tài xế</option>
+          {drivers.map((d) => (
+            <option key={d.id} value={String(d.id)}>{d.name}</option>
+          ))}
+        </select>
+        <select className="input" value={f.routeId || ""} onChange={(e) => setF({ ...f, routeId: e.target.value })}>
+          <option value="">Tất cả tuyến</option>
+          {routes.map((rt) => <option key={rt.id} value={String(rt.id)}>{rt.name}</option>)}
+        </select>
+        <select className="input" value={f.serviceType || ""} onChange={(e) => setF({ ...f, serviceType: e.target.value || undefined })}>
+          <option value="">Tất cả dịch vụ</option>
           {SERVICE_TYPE_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
-        <button className="btn-secondary" onClick={load}>Lọc báo cáo</button>
+        <button className="btn-secondary" type="button" onClick={() => load()} disabled={loading}>
+          {loading ? "Đang lọc…" : "Lọc báo cáo"}
+        </button>
       </div>
+      {err && <div className="card text-sm font-semibold text-red-700">{err}</div>}
+      {loading && !r && <div className="card text-sm font-semibold text-ink-500">Đang tải báo cáo…</div>}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <StatCard label="Tổng chuyến" value={r?.totalTrips || 0} tone="blue" icon={<dashboardIcons.Car size={20} />} />
         <StatCard label="Doanh thu" value={formatMoney(r?.totalRevenue)} tone="brand" icon={<dashboardIcons.Banknote size={20} />} />

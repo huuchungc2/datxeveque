@@ -82,7 +82,8 @@ Nhóm phải nhận tin «test Telegram».
 | Đơn mới | Khách/admin tạo đơn |
 | Yêu cầu sửa / hủy | Khách gửi trên website |
 | Gán điều phối | Admin gán đơn vào chuyến |
-| Chuyến tài xế | Tài xế được gán chuyến (tin cũng vào nhóm, kèm tên tài xế) |
+| Chuyến tài xế | Admin gán tài xế vào chuyến (hoặc gán đơn khi chuyến đã có tài xế) |
+| Tài xế nhận / từ chối | Tài xế bấm nhận hoặc từ chối chuyến trên app — báo admin/điều phối |
 
 Tin có link mở web (dùng `PUBLIC_SITE_URL` hoặc `FRONTEND_URL`).
 

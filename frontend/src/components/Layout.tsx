@@ -437,7 +437,6 @@ const adminNav: { title: string; items: NavItem[] }[] = [
 ];
 
 const driverNav: NavItem[] = [
-  { href: "", label: "Việc cần làm" },
   { href: "/chuyen", label: "Chuyến của tôi", match: ["/chuyen"] },
   { href: "/san-sang", label: "Báo rảnh / bận" },
   { href: "/thong-bao", label: "Thông báo" },

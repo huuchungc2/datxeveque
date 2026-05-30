@@ -163,11 +163,14 @@ model Driver {
   status      String   @default("Rảnh")
   location    String?  @map("current_location")
   direction   String?  @map("direction_preference")
+  routeId     Int?     @map("route_id")
+  runDirection String? @map("run_direction")
   seatsFree   Int      @default(0) @map("seats_free")
   note        String?  @db.Text
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
   user        User?    @relation(fields: [userId], references: [id])
+  route       Route?   @relation(fields: [routeId], references: [id])
   vehicles    Vehicle[]
   trips       Trip[]
   seatLogs    DriverSeatLog[]
@@ -221,6 +224,7 @@ model Route {
   bookings             Booking[]
   priceRules           PriceRule[]
   trips                Trip[]
+  drivers              Driver[]
 
   @@map("routes")
 }
@@ -364,6 +368,7 @@ model TripBooking {
   id        Int      @id @default(autoincrement())
   tripId    Int      @map("trip_id")
   bookingId Int      @map("booking_id")
+  seatCount Int      @default(1) @map("seat_count")
   createdAt DateTime @default(now()) @map("created_at")
   trip      Trip     @relation(fields: [tripId], references: [id])
   booking   Booking  @relation(fields: [bookingId], references: [id])

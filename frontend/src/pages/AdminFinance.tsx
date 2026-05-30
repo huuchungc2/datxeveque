@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowDownLeft,
@@ -16,6 +16,7 @@ import { fmtDepartureTime, formatDisplayDateTime } from "../lib/datetime";
 import { getVisiblePageNumbers } from "../lib/paginationUi";
 import { PageTitle, StatCard, dashboardIcons } from "../components/ui/AdminCharts";
 import { EmptyState } from "../components/ui/DesignKit";
+import { RouteCell } from "../components/ui/RouteCell";
 import { SETTLEMENT_STATUS_VI, settlementStatus } from "../lib/vi";
 
 type DebtTrip = {
@@ -46,6 +47,7 @@ type PaymentRow = {
 type Filters = {
   driverId: string;
   settlementStatus: string;
+  includeOpen: string;
   page: number;
   pageSize: number;
 };
@@ -53,6 +55,7 @@ type Filters = {
 const defaultFilters = (): Filters => ({
   driverId: "",
   settlementStatus: "",
+  includeOpen: "",
   page: 1,
   pageSize: 20,
 });
@@ -69,7 +72,10 @@ function directionLabel(direction: string) {
   return direction === "DRIVER_OWES_ADMIN" ? "Tài xế nộp VP" : "VP trả tài xế";
 }
 
+type PayDirection = "DRIVER_OWES_ADMIN" | "ADMIN_OWES_DRIVER";
+
 export function AdminDebts() {
+  const payPanelRef = useRef<HTMLDivElement>(null);
   const [trips, setTrips] = useState<DebtTrip[]>([]);
   const [payments, setPayments] = useState<PaymentRow[]>([]);
   const [drivers, setDrivers] = useState<{ id: number; name: string }[]>([]);
@@ -119,7 +125,10 @@ export function AdminDebts() {
 
   useEffect(() => {
     load();
-    api.get("/admin/drivers").then((r) => setDrivers(r.data || []));
+    api.get("/admin/drivers").then((r) => {
+      const data = r.data;
+      setDrivers(Array.isArray(data) ? data : data?.items || []);
+    });
   }, []);
 
   const pageStats = useMemo(() => {
@@ -159,19 +168,30 @@ export function AdminDebts() {
     load(next);
   };
 
-  const selectTripForPay = (t: DebtTrip) => {
+  const selectTripForPay = (t: DebtTrip, direction?: PayDirection) => {
+    const driverRem = Math.max(0, Number(t.driverDebtRemaining || 0));
+    const adminRem = Math.max(0, Number(t.adminOwesRemaining || 0));
+    let dir: PayDirection = direction || "DRIVER_OWES_ADMIN";
+    if (!direction) {
+      if (driverRem > 0 && adminRem <= 0) dir = "DRIVER_OWES_ADMIN";
+      else if (adminRem > 0 && driverRem <= 0) dir = "ADMIN_OWES_DRIVER";
+      else if (driverRem > 0 && adminRem > 0) {
+        dir = driverRem >= adminRem ? "DRIVER_OWES_ADMIN" : "ADMIN_OWES_DRIVER";
+      }
+    }
+    const amount = dir === "DRIVER_OWES_ADMIN" ? driverRem : adminRem;
     setForm((f) => ({
       ...f,
       tripId: String(t.id),
       driverId: String(t.driverId || ""),
-      amount: String(Math.max(0, Number(t.driverDebtRemaining || t.adminOwesRemaining || 0)) || ""),
-      direction:
-        Number(t.driverDebtRemaining || 0) >= Number(t.adminOwesRemaining || 0)
-          ? "DRIVER_OWES_ADMIN"
-          : "ADMIN_OWES_DRIVER",
+      amount: amount > 0 ? String(amount) : "",
+      direction: dir,
     }));
     setPayOpen(true);
     setPayMsg(null);
+    requestAnimationFrame(() => {
+      payPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   };
 
   const pay = async () => {
@@ -179,13 +199,22 @@ export function AdminDebts() {
       setPayMsg("Chọn tài xế và nhập số tiền.");
       return;
     }
+    if (!form.tripId) {
+      setPayMsg("Chọn chuyến (bấm «Thanh toán» trên dòng) để đối soát đúng từng chuyến.");
+      return;
+    }
+    const amount = Number(form.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setPayMsg("Số tiền phải lớn hơn 0.");
+      return;
+    }
     setPayBusy(true);
     setPayMsg(null);
     try {
       await api.post("/admin/settlements", {
         ...form,
-        tripId: form.tripId || null,
-        amount: Number(form.amount),
+        tripId: Number(form.tripId),
+        amount,
       });
       setForm({
         tripId: "",
@@ -196,7 +225,7 @@ export function AdminDebts() {
         note: "",
       });
       setPayMsg("Đã ghi nhận thanh toán.");
-      load();
+      load(filters);
     } catch (e: any) {
       setPayMsg(e.response?.data?.message || "Không ghi nhận được thanh toán.");
     } finally {
@@ -213,7 +242,7 @@ export function AdminDebts() {
     <div className="space-y-5 pb-8">
       <PageTitle
         title="Công nợ & đối soát"
-        subtitle="Theo dõi tiền tài xế nộp văn phòng và tiền văn phòng trả tài xế. Ghi nhận thanh toán theo từng chuyến."
+        subtitle="Mặc định chỉ chuyến đã hoàn thành. Ghi nhận thanh toán theo từng chuyến — số tiền không vượt còn nợ."
       />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -259,11 +288,17 @@ export function AdminDebts() {
           </span>
           <ChevronDown size={18} className={`text-slate-500 transition ${payOpen ? "rotate-180" : ""}`} />
         </button>
-        <div className={`border-t border-slate-100 px-4 py-4 md:border-t-0 ${payOpen ? "block" : "hidden md:block"}`}>
+        <div
+          ref={payPanelRef}
+          className={`border-t border-slate-100 px-4 py-4 md:border-t-0 ${payOpen ? "block" : "hidden md:block"}`}
+        >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="hidden text-base font-extrabold text-ink-900 md:block">Ghi nhận thanh toán</h2>
-              <p className="mt-1 text-sm text-slate-500">Chọn chuyến bên dưới hoặc nhập tay — hệ thống cập nhật trạng thái đối soát.</p>
+              <p className="mt-1 text-sm text-slate-500">
+                Bấm «Thu TX nộp VP» hoặc «VP trả TX» trên dòng chuyến → kiểm tra form → «Xác nhận thanh toán». Một chuyến có
+                cả hai chiều nợ phải ghi <b>2 lần</b> (mỗi chiều một lần).
+              </p>
             </div>
             {form.tripId && (
               <span className="badge badge-info">Chuyến #{form.tripId}</span>
@@ -393,6 +428,15 @@ export function AdminDebts() {
                 ))}
               </select>
             </label>
+            <label className="flex items-end gap-2 sm:col-span-2">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-slate-300"
+                checked={draft.includeOpen === "1"}
+                onChange={(e) => setDraft({ ...draft, includeOpen: e.target.checked ? "1" : "" })}
+              />
+              <span className="pb-2 text-sm text-slate-700">Gồm chuyến chưa hoàn thành (đang gom / đang chạy)</span>
+            </label>
             <label>
               <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Số dòng / trang</span>
               <select
@@ -449,16 +493,19 @@ export function AdminDebts() {
           </thead>
           <tbody className="divide-y divide-slate-100">
             {trips.map((t) => {
-              const hasDebt = Number(t.driverDebtRemaining || 0) > 0 || Number(t.adminOwesRemaining || 0) > 0;
+              const driverRem = Number(t.driverDebtRemaining || 0);
+              const adminRem = Number(t.adminOwesRemaining || 0);
+              const hasDebt = driverRem > 0 || adminRem > 0;
+              const dualDebt = driverRem > 0 && adminRem > 0;
               return (
                 <tr key={t.id} className={`transition hover:bg-brand-50/40 ${hasDebt ? "" : "opacity-75"}`}>
                   <td className="px-4 py-3">
                     <p className="font-extrabold text-brand-800">{t.code}</p>
                     <p className="text-xs text-slate-400">#{t.id}</p>
                   </td>
-                  <td className="px-4 py-3">
-                    <p className="font-semibold text-ink-900">{t.route?.name || "—"}</p>
-                    <p className="text-xs text-slate-500">{fmtDepartureTime(t.departureAt)}</p>
+                  <td className="max-w-[180px] px-4 py-3 align-top">
+                    <RouteCell route={t.route} />
+                    <p className="mt-1 text-xs text-slate-500">{fmtDepartureTime(t.departureAt)}</p>
                   </td>
                   <td className="px-4 py-3">
                     <p className="font-semibold text-ink-900">{t.driver?.name || "Chưa gán"}</p>
@@ -490,9 +537,36 @@ export function AdminDebts() {
                     </p>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <button type="button" className="btn-secondary py-1.5 text-xs" onClick={() => selectTripForPay(t)}>
-                      Thanh toán
-                    </button>
+                    <div className="flex flex-col items-end gap-1">
+                      {driverRem > 0 && (
+                        <button
+                          type="button"
+                          className="btn-secondary py-1.5 text-xs"
+                          disabled={!t.driverId}
+                          title={!t.driverId ? "Chuyến chưa có tài xế" : `Thu ${formatMoney(driverRem)} từ tài xế`}
+                          onClick={() => selectTripForPay(t, "DRIVER_OWES_ADMIN")}
+                        >
+                          Thu TX nộp VP
+                        </button>
+                      )}
+                      {adminRem > 0 && (
+                        <button
+                          type="button"
+                          className="btn-secondary py-1.5 text-xs"
+                          disabled={!t.driverId}
+                          title={!t.driverId ? "Chuyến chưa có tài xế" : `Trả ${formatMoney(adminRem)} cho tài xế`}
+                          onClick={() => selectTripForPay(t, "ADMIN_OWES_DRIVER")}
+                        >
+                          VP trả TX
+                        </button>
+                      )}
+                      {!hasDebt && (
+                        <span className="text-xs text-slate-400">Đã xong</span>
+                      )}
+                      {dualDebt && (
+                        <span className="text-[10px] font-semibold text-amber-700">2 chiều — ghi 2 lần</span>
+                      )}
+                    </div>
                   </td>
                 </tr>
               );
@@ -506,13 +580,16 @@ export function AdminDebts() {
 
       <div className="grid gap-3 md:hidden">
         {trips.map((t) => {
-          const hasDebt = Number(t.driverDebtRemaining || 0) > 0 || Number(t.adminOwesRemaining || 0) > 0;
+          const driverRem = Number(t.driverDebtRemaining || 0);
+          const adminRem = Number(t.adminOwesRemaining || 0);
+          const hasDebt = driverRem > 0 || adminRem > 0;
+          const dualDebt = driverRem > 0 && adminRem > 0;
           return (
             <div key={t.id} className={`card ${hasDebt ? "ring-1 ring-brand-100" : ""}`}>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-wide text-brand-700">{t.code}</p>
-                  <p className="mt-1 font-extrabold text-ink-900">{t.route?.name || "—"}</p>
+                  <RouteCell route={t.route} />
                   <p className="mt-1 text-xs text-slate-500">{fmtDepartureTime(t.departureAt)}</p>
                 </div>
                 <span className={`badge ${settlementBadgeClass(t.settlementStatus)}`}>
@@ -530,9 +607,32 @@ export function AdminDebts() {
                   <p className="font-extrabold text-cta">{formatMoney(t.adminOwesRemaining)}</p>
                 </div>
               </div>
-              <button type="button" className="btn-primary mt-3 w-full py-2 text-sm" onClick={() => selectTripForPay(t)}>
-                Ghi nhận thanh toán
-              </button>
+              {dualDebt && (
+                <p className="mt-2 text-xs font-semibold text-amber-800">Chuyến có cả TX nợ VP và VP trả TX — ghi nhận từng chiều.</p>
+              )}
+              <div className="mt-3 flex flex-col gap-2">
+                {driverRem > 0 && (
+                  <button
+                    type="button"
+                    className="btn-secondary w-full py-2 text-sm"
+                    disabled={!t.driverId}
+                    onClick={() => selectTripForPay(t, "DRIVER_OWES_ADMIN")}
+                  >
+                    Thu TX nộp VP ({formatMoney(driverRem)})
+                  </button>
+                )}
+                {adminRem > 0 && (
+                  <button
+                    type="button"
+                    className="btn-primary w-full py-2 text-sm"
+                    disabled={!t.driverId}
+                    onClick={() => selectTripForPay(t, "ADMIN_OWES_DRIVER")}
+                  >
+                    VP trả TX ({formatMoney(adminRem)})
+                  </button>
+                )}
+                {!hasDebt && <p className="text-center text-sm text-slate-500">Đã đối soát xong</p>}
+              </div>
             </div>
           );
         })}

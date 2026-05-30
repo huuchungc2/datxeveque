@@ -294,10 +294,12 @@ async function main() {
 
     const tryComplete = await req(`/driver/trips/${targetTripId}/complete`, { method: "POST", body: "{}" });
     const blockMsg = tryComplete.message || tryComplete.body?.message || "";
-    if (tryComplete.status === 400 && String(blockMsg).includes("Chưa thể hoàn thành")) {
-      pass("POST complete bị chặn khi đơn chưa xong");
-    } else if (tryComplete.status === 400) pass("POST complete trả 400 khi chưa xong");
-    else fail("POST complete khi chưa xong", `status ${tryComplete.status} ${blockMsg}`);
+    if (tryComplete.status === 200 || tryComplete.data?.ok) {
+      pass("POST complete — tài xế chốt chuyến (tự chốt vé chưa cập nhật)");
+    } else if (tryComplete.status === 400 && String(blockMsg).includes("xác nhận nhận chuyến")) {
+      pass("POST complete bị chặn khi còn đơn chờ xác nhận");
+    } else if (tryComplete.status === 400) pass("POST complete trả 400", blockMsg);
+    else fail("POST complete", `status ${tryComplete.status} ${blockMsg}`);
   } else {
     fail("Driver trip detail", "không có trip để test");
   }

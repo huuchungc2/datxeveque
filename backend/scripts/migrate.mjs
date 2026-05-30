@@ -150,6 +150,37 @@ const steps = [
     sql: `ALTER TABLE routes ADD COLUMN locked TINYINT(1) NOT NULL DEFAULT 0 AFTER status`,
     dup: "Duplicate column name 'locked'",
   },
+  {
+    name: "trip_bookings_seat_count",
+    sql: `ALTER TABLE trip_bookings ADD COLUMN seat_count INT NOT NULL DEFAULT 1 AFTER booking_id`,
+    dup: "Duplicate column name 'seat_count'",
+  },
+  {
+    name: "drivers_route_id",
+    sql: `ALTER TABLE drivers ADD COLUMN route_id INT NULL AFTER direction_preference`,
+    dup: "Duplicate column name 'route_id'",
+  },
+  {
+    name: "drivers_run_direction",
+    sql: `ALTER TABLE drivers ADD COLUMN run_direction VARCHAR(32) NULL AFTER route_id`,
+    dup: "Duplicate column name 'run_direction'",
+  },
+  {
+    name: "drivers_route_fk",
+    sql: `ALTER TABLE drivers ADD CONSTRAINT fk_drivers_route FOREIGN KEY (route_id) REFERENCES routes(id)`,
+    dup: "Duplicate foreign key",
+  },
+  {
+    name: "trip_bookings_seat_count_backfill",
+    sql: `UPDATE trip_bookings tb
+      INNER JOIN bookings b ON b.id = tb.booking_id
+      SET tb.seat_count = CASE
+        WHEN b.type IN ('CARGO', 'MARKET') THEN 1
+        ELSE GREATEST(1, COALESCE(b.passenger_count, 1))
+      END
+      WHERE tb.seat_count IS NULL OR tb.seat_count < 1`,
+    dup: null,
+  },
 ];
 
 async function main() {

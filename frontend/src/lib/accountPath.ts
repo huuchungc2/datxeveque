@@ -5,7 +5,7 @@ export function isAdminStaff(role: string) {
 }
 
 export function dashboardPath(role: string) {
-  if (role === "DRIVER") return "/tai-xe";
+  if (role === "DRIVER") return "/tai-xe/chuyen";
   if (role === "CUSTOMER") return "/khach";
   if (isAdminStaff(role)) return "/admin";
   return "/";

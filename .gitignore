@@ -4,6 +4,7 @@ Thumbs.db
 # env / secrets
 .env
 **/.env
+restore-db.local.bat
 
 # deps
 **/node_modules/

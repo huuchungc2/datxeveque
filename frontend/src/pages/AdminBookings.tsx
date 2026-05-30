@@ -58,6 +58,11 @@ function tripSummary(b: BookingRow) {
   return driver ? `${trip.code} · ${driver}` : trip.code;
 }
 
+function scheduledDateRangeLabel(from: string, to: string) {
+  if (from === to) return `ngày ${formatDisplayDate(from)}`;
+  return `từ ${formatDisplayDate(from)} đến ${formatDisplayDate(to)}`;
+}
+
 export function AdminBookings() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [items, setItems] = useState<BookingRow[]>([]);
@@ -144,15 +149,18 @@ export function AdminBookings() {
   }, []);
 
   const applyFilters = () => {
-    const day = draft.from?.trim() || todayLocalDateValue();
+    const today = todayLocalDateValue();
+    let from = draft.from?.trim() || today;
+    let to = draft.to?.trim() || today;
+    if (from > to) [from, to] = [to, from];
     const next = new URLSearchParams();
     if (draft.q.trim()) next.set("q", draft.q.trim());
     if (draft.type) next.set("type", draft.type);
     if (draft.routeId) next.set("routeId", draft.routeId);
     if (draft.status) next.set("status", draft.status);
     if (draft.paymentStatus) next.set("paymentStatus", draft.paymentStatus);
-    next.set("from", day);
-    next.set("to", day);
+    next.set("from", from);
+    next.set("to", to);
     next.set("page", "1");
     setSearchParams(next);
   };
@@ -237,13 +245,15 @@ export function AdminBookings() {
   };
 
   return (
-    <div className="space-y-5 pb-8">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <PageTitle
-          title="Đơn đặt xe"
-          subtitle={`Đơn có giờ đi trong ngày ${formatDisplayDate(filters.from)} — xác nhận / hủy nhanh ngay trên bảng hoặc bấm «Chi tiết» để sửa đơn.`}
-        />
-        <Link to="/admin/don-hang/moi" className="btn-primary inline-flex items-center gap-2 py-2.5">
+    <div className="min-w-0 max-w-full space-y-5 overflow-x-hidden pb-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <PageTitle
+            title="Đơn đặt xe"
+            subtitle={`Đơn có giờ đi ${scheduledDateRangeLabel(filters.from, filters.to)} — xác nhận / hủy nhanh ngay trên bảng hoặc bấm «Chi tiết» để sửa đơn.`}
+          />
+        </div>
+        <Link to="/admin/don-hang/moi" className="btn-primary inline-flex w-full min-h-[44px] shrink-0 items-center justify-center gap-2 py-2.5 sm:w-auto">
           <Plus size={18} />
           Thêm đơn
         </Link>
@@ -252,7 +262,7 @@ export function AdminBookings() {
       <div className="card !p-0 overflow-hidden">
         <button
           type="button"
-          className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left md:hidden"
+          className="flex w-full min-h-[44px] items-center justify-between gap-3 px-4 py-3 text-left md:hidden"
           onClick={() => setFiltersOpen((o) => !o)}
         >
           <span className="inline-flex items-center gap-2 text-sm font-bold text-ink-900">
@@ -263,13 +273,13 @@ export function AdminBookings() {
         </button>
 
         <div className={`border-t border-slate-100 px-4 py-4 ${filtersOpen ? "block" : "hidden md:block"} md:border-t-0`}>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
-            <label className="sm:col-span-2 lg:col-span-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <label className="sm:col-span-2 lg:col-span-3">
               <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Tìm kiếm</span>
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                 <input
-                  className="input !pl-10"
+                  className="input w-full !pl-10"
                   placeholder="Mã đơn, tên, SĐT..."
                   value={draft.q}
                   onChange={(e) => setDraft({ ...draft, q: e.target.value })}
@@ -279,7 +289,7 @@ export function AdminBookings() {
             </label>
             <label>
               <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Loại đơn</span>
-              <select className="input" value={draft.type} onChange={(e) => setDraft({ ...draft, type: e.target.value })}>
+              <select className="input w-full" value={draft.type} onChange={(e) => setDraft({ ...draft, type: e.target.value })}>
                 <option value="">Tất cả</option>
                 {SERVICE_TYPE_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>
@@ -290,7 +300,7 @@ export function AdminBookings() {
             </label>
             <label>
               <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Tuyến</span>
-              <select className="input" value={draft.routeId} onChange={(e) => setDraft({ ...draft, routeId: e.target.value })}>
+              <select className="input w-full" value={draft.routeId} onChange={(e) => setDraft({ ...draft, routeId: e.target.value })}>
                 <option value="">Tất cả</option>
                 {routes.map((r) => (
                   <option key={r.id} value={r.id}>
@@ -301,7 +311,7 @@ export function AdminBookings() {
             </label>
             <label>
               <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Trạng thái</span>
-              <select className="input" value={draft.status} onChange={(e) => setDraft({ ...draft, status: e.target.value })}>
+              <select className="input w-full" value={draft.status} onChange={(e) => setDraft({ ...draft, status: e.target.value })}>
                 <option value="">Tất cả</option>
                 {Object.entries(BOOKING_STATUS_VI).map(([k, v]) => (
                   <option key={k} value={k}>
@@ -313,7 +323,7 @@ export function AdminBookings() {
             <label>
               <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Thanh toán</span>
               <select
-                className="input"
+                className="input w-full"
                 value={draft.paymentStatus}
                 onChange={(e) => setDraft({ ...draft, paymentStatus: e.target.value })}
               >
@@ -325,20 +335,30 @@ export function AdminBookings() {
                 ))}
               </select>
             </label>
-            <label>
-              <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Ngày đơn (giờ đi)</span>
-              <GregorianDateInput
-                clearable={false}
-                value={draft.from || todayLocalDateValue()}
-                onChange={(value) => setDraft({ ...draft, from: value || todayLocalDateValue(), to: value || todayLocalDateValue() })}
-              />
-            </label>
+            <div className="grid grid-cols-1 gap-3 sm:col-span-2 sm:grid-cols-2 lg:col-span-3">
+              <label>
+                <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Từ ngày (giờ đi)</span>
+                <GregorianDateInput
+                  clearable={false}
+                  value={draft.from || todayLocalDateValue()}
+                  onChange={(value) => setDraft({ ...draft, from: value || todayLocalDateValue() })}
+                />
+              </label>
+              <label>
+                <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Đến ngày (giờ đi)</span>
+                <GregorianDateInput
+                  clearable={false}
+                  value={draft.to || todayLocalDateValue()}
+                  onChange={(value) => setDraft({ ...draft, to: value || todayLocalDateValue() })}
+                />
+              </label>
+            </div>
           </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button type="button" className="btn-primary py-2" onClick={applyFilters}>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <button type="button" className="btn-primary min-h-[44px] w-full py-2.5 sm:w-auto sm:min-w-[10rem]" onClick={applyFilters}>
               Áp dụng lọc
             </button>
-            <button type="button" className="btn-secondary py-2" onClick={clearFilters}>
+            <button type="button" className="btn-secondary min-h-[44px] w-full py-2.5 sm:w-auto" onClick={clearFilters}>
               Xóa lọc
             </button>
           </div>
@@ -417,7 +437,7 @@ export function AdminBookings() {
               {!loading && !items.length && (
                 <tr>
                   <td colSpan={8} className="px-4 py-12 text-center text-slate-500">
-                    Không có đơn trong ngày {formatDisplayDate(filters.from)}. Đổi ngày lọc hoặc{" "}
+                    Không có đơn {scheduledDateRangeLabel(filters.from, filters.to)}. Đổi khoảng ngày lọc hoặc{" "}
                     <Link to="/admin/don-hang/moi" className="font-bold text-brand-700">
                       tạo đơn mới
                     </Link>
@@ -464,9 +484,9 @@ export function AdminBookings() {
         ))}
         {!loading && !items.length && (
           <div className="card py-10 text-center text-sm text-slate-500">
-            Không có đơn có giờ đi trong ngày {formatDisplayDate(filters.from)}.
+            Không có đơn có giờ đi {scheduledDateRangeLabel(filters.from, filters.to)}.
             <br />
-            Thử đổi <b>Ngày đơn</b> hoặc bấm <b>Xóa lọc</b> (mặc định hôm nay).{" "}
+            Thử đổi <b>Từ ngày</b> / <b>Đến ngày</b> hoặc bấm <b>Xóa lọc</b> (mặc định hôm nay).{" "}
             <Link to="/admin/don-hang/moi" className="font-bold text-brand-700">
               Thêm đơn mới
             </Link>

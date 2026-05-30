@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Lock, LockOpen, MapPin, Pencil, Search, Truck, Users } from "lucide-react";
+import { adminResetUserPassword, validateAdminNewPassword } from "../components/admin/AdminResetPasswordModal";
 import { api } from "../lib/api";
 import { fmtDepartureTime } from "../lib/datetime";
 import { getVisiblePageNumbers } from "../lib/paginationUi";
 import { normalizeVnPhone, PHONE_INVALID_MESSAGE, phoneInputProps, sanitizePhoneInput } from "../lib/phone";
 import { useAuth } from "../lib/auth";
+import { runDirectionLabel, type RunDirection } from "../lib/runDirection";
 import { userStatus } from "../lib/vi";
 import { EmptyState, PageIntro } from "../components/ui/DesignKit";
 
@@ -16,6 +18,7 @@ const emptyDriverForm = () => ({
   phone: "",
   zaloPhone: "",
   status: "Rảnh",
+  runDirection: "" as "" | RunDirection,
   location: "",
   direction: "",
   seatsFree: 0,
@@ -39,6 +42,9 @@ type DriverRow = {
   location?: string | null;
   direction?: string | null;
   seatsFree: number;
+  routeId?: number | null;
+  runDirection?: string | null;
+  route?: { id: number; name: string; direction?: string } | null;
   note?: string | null;
   user?: { id: number; phone: string; status: string; name?: string } | null;
   vehicles?: { vehicleType: string; seats: number; licensePlate?: string | null }[];
@@ -57,6 +63,10 @@ export function AdminDrivers() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [qDraft, setQDraft] = useState("");
+  const [pwNew, setPwNew] = useState("");
+  const [pwConfirm, setPwConfirm] = useState("");
+  const [pwError, setPwError] = useState("");
+  const [pwSaving, setPwSaving] = useState(false);
 
   const q = searchParams.get("q") || "";
   const status = searchParams.get("status") || "";
@@ -124,15 +134,25 @@ export function AdminDrivers() {
   const resetForm = () => {
     setForm(emptyDriverForm());
     setEditId(null);
+    setPwNew("");
+    setPwConfirm("");
+    setPwError("");
   };
 
   const startEdit = (d: DriverRow) => {
+    setPwNew("");
+    setPwConfirm("");
+    setPwError("");
     setEditId(d.id);
     setForm({
       name: d.name ?? "",
       phone: d.phone ?? "",
       zaloPhone: d.zaloPhone ?? "",
       status: d.status ?? "Rảnh",
+      runDirection:
+        d.runDirection === "SG_TO_PROVINCE" || d.runDirection === "PROVINCE_TO_SG"
+          ? d.runDirection
+          : "",
       location: d.location ?? "",
       direction: d.direction ?? "",
       seatsFree: Number(d.seatsFree ?? 0),
@@ -150,8 +170,7 @@ export function AdminDrivers() {
       name: form.name.trim(),
       phone,
       zaloPhone,
-      location: form.location.trim() || null,
-      direction: form.direction.trim() || null,
+      runDirection: form.runDirection || undefined,
       note: form.note.trim() || null,
     };
   };
@@ -159,6 +178,7 @@ export function AdminDrivers() {
   const save = async () => {
     if (!editId) return;
     if (!form.name.trim() || !form.phone.trim()) return alert("Nhập tên và số điện thoại");
+    if (!form.runDirection) return alert("Chọn chiều chạy cho tài xế");
     setBusy(true);
     try {
       await api.patch(`/admin/drivers/${editId}`, payload());
@@ -169,6 +189,30 @@ export function AdminDrivers() {
       alert(e.message || e.response?.data?.message || "Không lưu được");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const editingDriver = editId ? items.find((d) => d.id === editId) : null;
+  const editingUserId = editingDriver?.user?.id;
+
+  const savePasswordInForm = async () => {
+    if (!editingUserId) return;
+    const err = validateAdminNewPassword(pwNew, pwConfirm);
+    if (err) {
+      setPwError(err);
+      return;
+    }
+    setPwSaving(true);
+    setPwError("");
+    try {
+      await adminResetUserPassword(editingUserId, pwNew);
+      setPwNew("");
+      setPwConfirm("");
+      setMsg("Đã đặt lại mật khẩu");
+    } catch (e: any) {
+      setPwError(e.response?.data?.message || "Không đổi được mật khẩu");
+    } finally {
+      setPwSaving(false);
     }
   };
 
@@ -240,9 +284,65 @@ export function AdminDrivers() {
               Ghế báo rảnh (tài xế tự cập nhật)
               <input className="input mt-1 bg-slate-50" readOnly type="number" value={form.seatsFree} />
             </label>
-            <input className="input" placeholder="Vị trí (admin sửa được)" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
-            <input className="input md:col-span-2" placeholder="Chiều nhận" value={form.direction} onChange={(e) => setForm({ ...form, direction: e.target.value })} />
+            <label className="text-sm font-semibold md:col-span-2">
+              Chiều chạy (mọi tuyến cùng chiều) <span className="text-red-600">*</span>
+              <select
+                className="input mt-1"
+                value={form.runDirection}
+                onChange={(e) =>
+                  setForm({ ...form, runDirection: e.target.value as typeof form.runDirection })
+                }
+              >
+                <option value="">— Chọn chiều —</option>
+                <option value="SG_TO_PROVINCE">Sài Gòn → Đức Linh / Tánh Linh</option>
+                <option value="PROVINCE_TO_SG">Đức Linh / Tánh Linh → Sài Gòn</option>
+              </select>
+            </label>
+            {form.runDirection && (
+              <p className="md:col-span-2 text-sm text-slate-600">
+                Vị trí đón: <b>{form.location || "—"}</b> · {form.direction || runDirectionLabel(form.runDirection)}
+              </p>
+            )}
             <textarea className="input md:col-span-2" rows={2} placeholder="Ghi chú nội bộ" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
+            {isAdmin && editingUserId && (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 md:col-span-2">
+                <p className="text-sm font-bold text-slate-800">Đổi mật khẩu đăng nhập</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Tài khoản: <b>{editingDriver?.name}</b> · {editingDriver?.user?.phone || editingDriver?.phone} — chỉ admin, mật khẩu không hiển thị lại sau khi lưu.
+                </p>
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <label className="text-sm font-semibold">
+                    Mật khẩu mới
+                    <input
+                      className="input mt-1"
+                      type="password"
+                      autoComplete="new-password"
+                      minLength={6}
+                      value={pwNew}
+                      onChange={(e) => setPwNew(e.target.value)}
+                    />
+                  </label>
+                  <label className="text-sm font-semibold">
+                    Nhập lại mật khẩu
+                    <input
+                      className="input mt-1"
+                      type="password"
+                      autoComplete="new-password"
+                      value={pwConfirm}
+                      onChange={(e) => setPwConfirm(e.target.value)}
+                    />
+                  </label>
+                </div>
+                {pwError && (
+                  <p className="mt-2 text-sm font-semibold text-red-700" role="alert">
+                    {pwError}
+                  </p>
+                )}
+                <button type="button" className="btn-secondary mt-3" disabled={pwSaving || busy} onClick={savePasswordInForm}>
+                  {pwSaving ? "Đang lưu…" : "Cập nhật mật khẩu"}
+                </button>
+              </div>
+            )}
             <div className="flex flex-wrap gap-2 md:col-span-2">
               <button type="button" className="btn-primary" disabled={busy} onClick={save}>
                 Lưu
@@ -336,7 +436,7 @@ export function AdminDrivers() {
                 <tr>
                   <th className="px-4 py-3">Tài xế</th>
                   <th className="px-4 py-3">Trạng thái</th>
-                  <th className="px-4 py-3">Vị trí / chiều</th>
+                  <th className="px-4 py-3">Chiều chạy</th>
                   <th className="px-4 py-3">Xe</th>
                   <th className="px-4 py-3">Ghế báo</th>
                   <th className="px-4 py-3">Tài khoản</th>
@@ -358,12 +458,18 @@ export function AdminDrivers() {
                       <td className="px-4 py-3">
                         <span className={`badge ${driverStatusBadge(d.status)}`}>{d.status}</span>
                       </td>
-                      <td className="px-4 py-3 max-w-[12rem]">
-                        <p className="flex items-start gap-1 text-slate-700">
-                          <MapPin size={14} className="mt-0.5 shrink-0 text-slate-400" />
-                          {d.location || "—"}
+                      <td className="px-4 py-3 max-w-[14rem]">
+                        <p className="font-semibold text-slate-800">
+                          {d.runDirection === "SG_TO_PROVINCE" || d.runDirection === "PROVINCE_TO_SG"
+                            ? runDirectionLabel(d.runDirection)
+                            : d.direction || "Chưa chọn chiều"}
                         </p>
-                        {d.direction && <p className="mt-1 text-xs text-slate-500">{d.direction}</p>}
+                        {d.location && (
+                          <p className="mt-1 flex items-start gap-1 text-xs text-slate-500">
+                            <MapPin size={12} className="mt-0.5 shrink-0" />
+                            {d.location}
+                          </p>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <span className="flex items-center gap-1 text-slate-700">
@@ -387,15 +493,17 @@ export function AdminDrivers() {
                             <Pencil size={14} />
                           </button>
                           {isAdmin && d.user && (
-                            <button
-                              type="button"
-                              className={`btn-ghost py-1.5 text-xs ${locked ? "text-green-700" : "text-red-700"}`}
-                              disabled={busy}
-                              onClick={() => toggleLock(d)}
-                              title={locked ? "Mở khóa" : "Khóa"}
-                            >
-                              {locked ? <LockOpen size={14} /> : <Lock size={14} />}
-                            </button>
+                            <>
+                              <button
+                                type="button"
+                                className={`btn-ghost py-1.5 text-xs ${locked ? "text-green-700" : "text-red-700"}`}
+                                disabled={busy}
+                                onClick={() => toggleLock(d)}
+                                title={locked ? "Mở khóa" : "Khóa"}
+                              >
+                                {locked ? <LockOpen size={14} /> : <Lock size={14} />}
+                              </button>
+                            </>
                           )}
                         </div>
                       </td>
@@ -421,7 +529,12 @@ export function AdminDrivers() {
                     </div>
                     <span className={`badge ${driverStatusBadge(d.status)}`}>{d.status}</span>
                   </div>
-                  <p className="mt-2 text-sm text-slate-600">
+                  <p className="mt-2 text-sm font-medium text-slate-800">
+                    {d.runDirection === "SG_TO_PROVINCE" || d.runDirection === "PROVINCE_TO_SG"
+                      ? runDirectionLabel(d.runDirection)
+                      : "Chưa chọn chiều"}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-600">
                     <MapPin size={14} className="mr-1 inline" />
                     {d.location || "Chưa báo vị trí"}
                   </p>
@@ -440,14 +553,16 @@ export function AdminDrivers() {
                       Sửa
                     </button>
                     {isAdmin && d.user && (
-                      <button
-                        type="button"
-                        className={locked ? "btn-secondary py-2 text-sm" : "btn-ghost py-2 text-sm text-red-700"}
-                        disabled={busy}
-                        onClick={() => toggleLock(d)}
-                      >
-                        {locked ? "Mở khóa" : "Khóa TK"}
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          className={locked ? "btn-secondary py-2 text-sm" : "btn-ghost py-2 text-sm text-red-700"}
+                          disabled={busy}
+                          onClick={() => toggleLock(d)}
+                        >
+                          {locked ? "Mở khóa" : "Khóa TK"}
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>

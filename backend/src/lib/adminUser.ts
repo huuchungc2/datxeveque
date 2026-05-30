@@ -2,6 +2,8 @@ import { UserRole, UserStatus } from "@prisma/client";
 import { prisma } from "./prisma.js";
 import { hashPassword } from "./auth.js";
 import { assertVnPhone } from "./phone.js";
+import { resolveDriverRunDirectionFields } from "./driverAvailability.js";
+import type { RunDirection } from "./routeEndpoints.js";
 
 function parseRole(raw: unknown): UserRole {
   const role = String(raw || "").toUpperCase() as UserRole;
@@ -23,9 +25,27 @@ async function assertEmailFree(email: string | null, excludeUserId?: number) {
 }
 
 export const userInclude = {
-  driver: { include: { vehicles: true } },
+  driver: {
+    include: {
+      vehicles: true,
+      route: { select: { id: true, name: true, direction: true } },
+    },
+  },
   customer: true,
 } as const;
+
+type DriverRunFields = ReturnType<typeof resolveDriverRunDirectionFields>;
+
+async function driverRunFieldsFromBody(body: Record<string, unknown>): Promise<Partial<DriverRunFields> & { routeId: null }> {
+  const runDirection = String(body.runDirection || "") as RunDirection;
+  if (runDirection !== "SG_TO_PROVINCE" && runDirection !== "PROVINCE_TO_SG") {
+    if (body.runDirection !== undefined) {
+      throw Object.assign(new Error("Chọn chiều chạy"), { statusCode: 400 });
+    }
+    return { routeId: null };
+  }
+  return { ...resolveDriverRunDirectionFields(runDirection), routeId: null };
+}
 
 export async function createAdminUser(body: Record<string, unknown>) {
   const name = String(body.name || "").trim();
@@ -58,6 +78,7 @@ export async function createAdminUser(body: Record<string, unknown>) {
         body.zaloPhone && String(body.zaloPhone).trim()
           ? assertVnPhone(String(body.zaloPhone))
           : null;
+      const runFields = await driverRunFieldsFromBody(body);
       const driver = await tx.driver.create({
         data: {
           userId: user.id,
@@ -65,8 +86,14 @@ export async function createAdminUser(body: Record<string, unknown>) {
           phone,
           zaloPhone,
           status: String(body.driverStatus || "Rảnh"),
-          location: body.location ? String(body.location) : null,
-          direction: body.direction ? String(body.direction) : null,
+          location:
+            runFields.location ??
+            (body.location ? String(body.location) : null),
+          direction:
+            runFields.direction ??
+            (body.direction ? String(body.direction) : null),
+          routeId: null,
+          runDirection: runFields.runDirection ?? null,
           seatsFree: Number(body.seatsFree ?? 0),
           note: body.note ? String(body.note) : null,
         },
@@ -140,13 +167,24 @@ export async function updateAdminUser(id: number, body: Record<string, unknown>)
             ? assertVnPhone(String(body.zaloPhone))
             : null
           : undefined;
+      let runFields: Partial<DriverRunFields> & { routeId?: null } = {};
+      if (body.runDirection !== undefined) {
+        runFields = await driverRunFieldsFromBody(body);
+      }
       const driverData: Record<string, unknown> = {
         name,
         phone,
         ...(zaloPhone !== undefined ? { zaloPhone } : {}),
         ...(body.driverStatus !== undefined ? { status: String(body.driverStatus) } : {}),
-        ...(body.location !== undefined ? { location: body.location || null } : {}),
-        ...(body.direction !== undefined ? { direction: body.direction || null } : {}),
+        ...(runFields.runDirection !== undefined
+          ? { ...runFields, routeId: null }
+          : {}),
+        ...(runFields.runDirection === undefined && body.location !== undefined
+          ? { location: body.location || null }
+          : {}),
+        ...(runFields.runDirection === undefined && body.direction !== undefined
+          ? { direction: body.direction || null }
+          : {}),
         ...(body.seatsFree !== undefined ? { seatsFree: Number(body.seatsFree) } : {}),
         ...(body.note !== undefined ? { note: body.note || null } : {}),
       };
@@ -154,6 +192,7 @@ export async function updateAdminUser(id: number, body: Record<string, unknown>)
       if (existing.driver) {
         await tx.driver.update({ where: { id: existing.driver.id }, data: driverData });
       } else {
+        const runFieldsNew = await driverRunFieldsFromBody(body);
         await tx.driver.create({
           data: {
             userId: id,
@@ -161,8 +200,10 @@ export async function updateAdminUser(id: number, body: Record<string, unknown>)
             phone,
             zaloPhone: (zaloPhone as string | null) ?? null,
             status: String(body.driverStatus || "Rảnh"),
-            location: body.location ? String(body.location) : null,
-            direction: body.direction ? String(body.direction) : null,
+            location: runFieldsNew.location ?? (body.location ? String(body.location) : null),
+            direction: runFieldsNew.direction ?? (body.direction ? String(body.direction) : null),
+            routeId: null,
+            runDirection: runFieldsNew.runDirection ?? null,
             seatsFree: Number(body.seatsFree ?? 0),
             note: body.note ? String(body.note) : null,
           },

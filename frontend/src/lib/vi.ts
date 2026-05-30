@@ -62,10 +62,10 @@ export const PAYMENT_RECEIVER_VI: Record<string, string> = {
 
 export const DRIVER_RIDE_STATUS_VI: Record<string, string> = {
   WAITING_PICKUP: "Chờ đón",
-  PICKING_UP: "Đang đón",
+  PICKING_UP: "Bắt đầu đón",
   PICKED_UP: "Đã đón",
-  DROPPING_OFF: "Đang trả",
-  DROPPED_OFF: "Đã trả",
+  DROPPING_OFF: "Đang trả khách",
+  DROPPED_OFF: "Đã trả khách",
   CUSTOMER_CANCELLED: "Khách hủy",
   UNREACHABLE: "Không liên lạc được",
   NO_SHOW: "Khách không ra",

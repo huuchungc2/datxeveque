@@ -8,7 +8,7 @@ import {
   type RouteEndpoint,
   type RunDirection,
 } from "./routeEndpoints.js";
-import { bookingSeatUnits } from "./bookingSeats.js";
+import { bookingRemainingSeatUnits, bookingSeatUnits } from "./bookingSeats.js";
 
 export type BookingSeatLine = {
   id: number;
@@ -71,14 +71,14 @@ function hourKey(scheduledAt?: string | Date | null) {
 }
 
 function seatsOf(bookings: any[]) {
-  return bookings.reduce((s, b) => s + bookingSeatUnits(b), 0);
+  return bookings.reduce((s, b) => s + bookingRemainingSeatUnits(b, b.tripBookings), 0);
 }
 
 function bookingLines(bookings: any[]): BookingSeatLine[] {
   return bookings.map((b) => ({
     id: b.id,
     code: b.code,
-    passengerCount: bookingSeatUnits(b),
+    passengerCount: bookingRemainingSeatUnits(b, b.tripBookings),
   }));
 }
 
@@ -139,13 +139,16 @@ export function groupBookingsForDispatch(bookings: any[]): any[][] {
 
 export function packBookingsByVehicleCapacity(bookings: any[], maxVehicleSeats: number): any[][] {
   const cap = Math.max(1, maxVehicleSeats);
-  const sorted = [...bookings].sort((a, b) => bookingSeatUnits(b) - bookingSeatUnits(a));
+  const sorted = [...bookings].sort(
+    (a, b) => bookingRemainingSeatUnits(b, b.tripBookings) - bookingRemainingSeatUnits(a, a.tripBookings)
+  );
   const chunks: any[][] = [];
   let current: any[] = [];
   let used = 0;
 
   for (const b of sorted) {
-    const p = bookingSeatUnits(b);
+    const p = bookingRemainingSeatUnits(b, b.tripBookings);
+    if (p <= 0) continue;
     if (p > cap) {
       if (current.length) {
         chunks.push(current);
@@ -178,9 +181,9 @@ function driverFitsSeats(driver: any, seatsNeeded: number, run: RunDirection) {
   const vehicle = driver.vehicles?.[0];
   if (!vehicle) return null;
   const cap = Number(vehicle.seats);
-  if (cap < seatsNeeded) return null;
+  if (cap <= 0) return null;
   if (!driverMatchesRun(driver, run)) return null;
-  return { driver, vehicle, cap, effective: cap };
+  return { driver, vehicle, cap, effective: Math.min(cap, seatsNeeded) };
 }
 
 function pickDriver(drivers: any[], seatsNeeded: number, run: RunDirection) {
@@ -190,30 +193,27 @@ function pickDriver(drivers: any[], seatsNeeded: number, run: RunDirection) {
 
   if (!scored.length) return null;
 
-  const wantDir =
-    run === "SG_TO_PROVINCE" ? /sài|sai|hcm|hồ\s*chí/i : /đức|tánh|duc|tanh/i;
-
-  return scored.sort((a, b) => {
-    const aDir = wantDir.test(String(a.driver.direction || "")) ? 1 : 0;
-    const bDir = wantDir.test(String(b.driver.direction || "")) ? 1 : 0;
-    if (bDir !== aDir) return bDir - aDir;
-    return a.cap - b.cap;
-  })[0];
+  return scored.sort((a, b) => a.cap - b.cap)[0];
 }
 
 function pickTrip(trips: any[], routeId: number, seatsNeeded: number, targetAt: string, run: RunDirection) {
   const ok = trips.filter(
     (t) =>
       t.routeId === routeId &&
-      Number(t.availableSeats) >= seatsNeeded &&
+      Number(t.availableSeats) > 0 &&
       ["COLLECTING", "READY"].includes(t.status) &&
       tripMatchesRun(t, run)
   );
   if (!ok.length) return null;
   const target = new Date(targetAt).getTime();
   return ok.sort((a, b) => {
-    const wasteA = Number(a.availableSeats) - seatsNeeded;
-    const wasteB = Number(b.availableSeats) - seatsNeeded;
+    const assignA = Math.min(seatsNeeded, Number(a.availableSeats));
+    const assignB = Math.min(seatsNeeded, Number(b.availableSeats));
+    const fullA = assignA >= seatsNeeded ? 1 : 0;
+    const fullB = assignB >= seatsNeeded ? 1 : 0;
+    if (fullB !== fullA) return fullB - fullA;
+    const wasteA = Number(a.availableSeats) - assignA;
+    const wasteB = Number(b.availableSeats) - assignB;
     if (wasteA !== wasteB) return wasteA - wasteB;
     const aDriver = a.driverId ? 1 : 0;
     const bDriver = b.driverId ? 1 : 0;
@@ -247,11 +247,15 @@ function buildOneSuggestion(
   if (trip) {
     const vehicleSeats = Number(trip.totalSeats);
     const avail = Number(trip.availableSeats);
+    const seatsAssignable = Math.min(seatsNeeded, avail);
+    const partial = seatsAssignable < seatsNeeded;
     return {
       id: `assign-${id}`,
       kind: "assign_trip",
       title: `${seatsNeeded} khách • ${TYPE_LABELS[orderType] || orderType} • ${endpointLabel(ep)}`,
-      reason: `Gom vào ${trip.code} (${vehicleSeats} chỗ, còn ${avail}, gán ${seatsNeeded} khách)`,
+      reason: partial
+        ? `Gom vào ${trip.code} (${vehicleSeats} chỗ, còn ${avail}) — gán ${seatsAssignable}/${seatsNeeded} ghế lần này`
+        : `Gom vào ${trip.code} (${vehicleSeats} chỗ, còn ${avail}, gán ${seatsNeeded} khách)`,
       bookingIds,
       bookings,
       routeId,
@@ -263,7 +267,7 @@ function buildOneSuggestion(
       departureAt,
       seatsNeeded,
       vehicleSeats,
-      seatsRemainingAfter: avail - seatsNeeded,
+      seatsRemainingAfter: avail - seatsAssignable,
       tripId: trip.id,
       tripCode: trip.code,
       tripBookedSeats: Number(trip.bookedSeats),

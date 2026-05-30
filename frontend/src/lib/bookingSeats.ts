@@ -10,8 +10,38 @@ export function bookingSeatUnits(booking: { type?: string; passengerCount?: numb
   return Math.max(0, Number(booking.passengerCount || 0));
 }
 
-export function bookingCapacityLabel(booking: { type?: string; passengerCount?: number | null }) {
+export function tripBookingSeatUnits(tb: {
+  seatCount?: number | null;
+  booking?: { type?: string; passengerCount?: number | null };
+}) {
+  if (tb.seatCount != null && Number(tb.seatCount) > 0) return Number(tb.seatCount);
+  if (tb.booking) return bookingSeatUnits(tb.booking);
+  return 1;
+}
+
+export function bookingRemainingSeatUnits(
+  booking: { type?: string; passengerCount?: number | null; dispatchSeatRemaining?: number },
+  tripBookings?: { seatCount?: number | null; booking?: { type?: string; passengerCount?: number | null } }[]
+) {
+  if (booking.dispatchSeatRemaining != null) return Math.max(0, Number(booking.dispatchSeatRemaining));
+  const total = bookingSeatUnits(booking);
+  if (!tripBookings?.length) return total;
+  const assigned = tripBookings.reduce((s, tb) => s + tripBookingSeatUnits(tb), 0);
+  return Math.max(0, total - assigned);
+}
+
+export function bookingCapacityLabel(booking: {
+  type?: string;
+  passengerCount?: number | null;
+  dispatchSeatRemaining?: number;
+  dispatchSeatTotal?: number;
+}) {
   if (!usesPassengerCount(booking.type)) return "1 đơn";
+  const total = booking.dispatchSeatTotal ?? Number(booking.passengerCount || 0);
+  const remaining = booking.dispatchSeatRemaining ?? total;
+  if (total > 0 && remaining > 0 && remaining < total) {
+    return `${remaining}/${total} ghế còn gán`;
+  }
   const n = Number(booking.passengerCount || 0);
   return n > 0 ? `${n} khách` : "—";
 }
@@ -41,4 +71,22 @@ export function adminBookingQuantityLabel(booking: {
 
 export function adminBookingSeatUnits(booking: { type?: string | null; passengerCount?: number | null }) {
   return bookingSeatUnits({ type: booking.type || undefined, passengerCount: booking.passengerCount });
+}
+
+/** Chia ghế gán lần này cho danh sách đơn đã chọn (theo thứ tự, tối đa tripAvail). */
+export function computeAssignSeatCounts(
+  bookings: { id: number; type?: string; passengerCount?: number | null; dispatchSeatRemaining?: number }[],
+  tripAvail: number
+) {
+  const seatCounts: Record<number, number> = {};
+  let left = Math.max(0, tripAvail);
+  for (const b of bookings) {
+    const remaining = bookingRemainingSeatUnits(b);
+    const assign = Math.min(remaining, left);
+    if (assign > 0) {
+      seatCounts[b.id] = assign;
+      left -= assign;
+    }
+  }
+  return { seatCounts, total: Object.values(seatCounts).reduce((a, n) => a + n, 0) };
 }

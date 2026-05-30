@@ -106,9 +106,53 @@ Tài liệu ngắn để nhớ quy ước UI/FE (cập nhật khi đổi hành v
 
 ## Admin — điều phối (`AdminDispatch.tsx`)
 
-- 3 cột dữ liệu từ `GET /admin/dispatch`; gán qua `POST /admin/dispatch/apply` hoặc `POST /admin/trips/:id/add-bookings`.
-- Không gán vượt `availableSeats`; đơn thiếu `scheduledAt` không gom/gán.
-- Gợi ý tách theo sức chứa xe (backend `dispatchSuggestions.ts`).
+**Chi tiết đầy đủ:** `DISPATCH_GHI_CHU_LOGIC.md` (root repo).
+
+### Nguồn dữ liệu
+
+- `GET /admin/dispatch` → `unassignedBookings`, `collectingTrips`, `availableDrivers`, `suggestions[]`, `seatSummary`.
+- Mỗi đơn chờ có thêm: `dispatchSeatTotal`, `dispatchSeatAssigned`, `dispatchSeatRemaining` (backend `enrichBookingDispatchSeats`).
+
+### Gán ghế từng phần (một đơn → nhiều chuyến)
+
+- Đơn **10 ghế**, chuyến còn **3** → bấm gán → **3 ghế** lên chuyến; đơn vẫn ở cột ① với nhãn **`7/10 ghế còn gán`**.
+- Lặp đến khi `dispatchSeatRemaining = 0` → đơn biến mất khỏi hàng chờ (`ASSIGNED` phía server).
+- **Không** cần tách đơn thủ công trong quản lý đặt chỗ cho flow này.
+
+### Khi đã chọn đơn (checkbox cột ①)
+
+- Cột **② Chuyến**: hiện **mọi** chuyến `COLLECTING`/`READY` còn **≥ 1 ghế**, cùng tuyến + chiều — **không** lọc “phải đủ hết ghế đã chọn”.
+- Cột **③ Tài xế**: mọi tài rảnh đúng chiều; **Tạo chuyến** gán `min(ghế còn, số chỗ xe)`.
+- Nút gán: `Gán 3/10 ghế lần này` (`computeAssignSeatCounts` trong `lib/bookingSeats.ts`).
+
+### Gợi ý tự động
+
+- `suggestions[].seatsNeeded` = ghế **còn** gán trong pack (không phải tổng ban đầu nếu đã gán một phần).
+- Dropdown **Phương án điều phối**: `dispatchOptions[]` — label kiểu `gán X/Y ghế lần này`.
+- **Xác nhận** → `POST /admin/dispatch/apply` + `seatCounts` (backend tự cắt theo ghế trống).
+
+### API gán
+
+```txt
+POST /admin/trips/:id/add-bookings
+  { bookingIds: [id], seatCounts?: { "id": n } }   // không gửi seatCounts → auto min(remaining, avail)
+
+POST /admin/dispatch/apply
+  { kind, bookingIds, tripId?, seatCounts?, ... }
+```
+
+### Ràng buộc UI (giữ nguyên)
+
+- Không gán vượt `availableSeats` chuyến (backend chặn).
+- Đơn thiếu `scheduledAt` không gán / không tạo chuyến.
+- Không gán vào chuyến `IN_PROGRESS` (không có trong list).
+
+### Helper frontend
+
+| File | Hàm |
+|------|-----|
+| `lib/bookingSeats.ts` | `bookingRemainingSeatUnits`, `computeAssignSeatCounts`, `bookingCapacityLabel` (hiện `7/10 ghế còn gán`) |
+| `lib/runDirection.ts` | `tripMatchesRun`, `driverMatchesRun` — lọc chiều SG ↔ tỉnh |
 
 ---
 

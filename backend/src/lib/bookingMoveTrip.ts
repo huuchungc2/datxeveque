@@ -1,8 +1,8 @@
 import { BookingStatus, TripStatus } from "@prisma/client";
 import { prisma } from "./prisma.js";
-import { bookingSeatUnits } from "./bookingSeats.js";
+import { bookingRemainingSeatUnits, bookingSeatUnits, tripBookingSeatUnits } from "./bookingSeats.js";
 import { notifyDispatchAssigned, safeNotify } from "./notifications.js";
-import { rollupBookingFinancials } from "./settlement.js";
+import { rollupBookingFinancialsPortion } from "./settlement.js";
 
 const ACTIVE_TRIP: TripStatus[] = [TripStatus.COLLECTING, TripStatus.READY, TripStatus.IN_PROGRESS];
 
@@ -35,8 +35,8 @@ export async function moveBookingBetweenTrips(
       throw Object.assign(new Error("Chuyến đích không nhận thêm đơn"), { statusCode: 400 });
     }
 
-    const seats = bookingSeatUnits(booking);
-    const fin = rollupBookingFinancials(booking);
+    const seats = tripBookingSeatUnits(link);
+    const fin = rollupBookingFinancialsPortion(booking, seats, bookingSeatUnits(booking));
 
     if (seats > 0 && Number(toTrip.availableSeats) < seats) {
       throw Object.assign(
@@ -62,15 +62,26 @@ export async function moveBookingBetweenTrips(
       },
     });
 
-    const remaining = await tx.tripBooking.count({ where: { bookingId } });
-    if (!remaining) {
+    const remainingLinks = await tx.tripBooking.count({ where: { bookingId } });
+    if (!remainingLinks) {
       await tx.booking.update({
         where: { id: bookingId },
         data: { status: BookingStatus.WAITING_DISPATCH },
       });
+    } else {
+      const left = bookingRemainingSeatUnits(
+        booking,
+        await tx.tripBooking.findMany({ where: { bookingId } })
+      );
+      if (left > 0) {
+        await tx.booking.update({
+          where: { id: bookingId },
+          data: { status: BookingStatus.WAITING_DISPATCH },
+        });
+      }
     }
 
-    await tx.tripBooking.create({ data: { tripId: toTripId, bookingId } });
+    await tx.tripBooking.create({ data: { tripId: toTripId, bookingId, seatCount: seats } });
     const updatedTo = await tx.trip.update({
       where: { id: toTripId },
       data: {

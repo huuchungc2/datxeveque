@@ -24,7 +24,7 @@ import { AdminDebts } from './pages/AdminFinance';
 import { AdminCatalogHub, AdminContentHub } from './pages/AdminHubPages';
 import { TrackBookingPage } from './pages/TrackBookingPage';
 import ContactPage from './pages/ContactPage';
-import { DriverAvailability, DriverDebts, DriverJobs, DriverNotifications, DriverTripDetail, DriverDashboard } from './pages/DriverPages';
+import { DriverAvailability, DriverDebts, DriverJobs, DriverNotifications } from './pages/DriverPages';
 import { CustomerHome } from './pages/CustomerPages';
 import { AccountProfilePage } from './pages/AccountProfilePage';
 import { coreBookableServices } from './routes/bookableServices';
@@ -72,9 +72,9 @@ function App(){return <HelmetProvider><SiteSettingsProvider><AuthProvider><Brows
 <Route path="/admin/gia" element={<Navigate to="/admin/danh-muc" replace />} />
 <Route path="/admin/cai-dat" element={<ProtectedRoute roles={["ADMIN"]}><DashboardLayout type="admin"><AdminSettings/></DashboardLayout></ProtectedRoute>} />
 <Route path="/admin/tai-khoan" element={<ProtectedRoute roles={["ADMIN","DISPATCHER","ACCOUNTANT"]}><DashboardLayout type="admin"><AccountProfilePage/></DashboardLayout></ProtectedRoute>} />
-<Route path="/tai-xe" element={<ProtectedRoute roles={["DRIVER"]}><DashboardLayout type="driver"><DriverDashboard/></DashboardLayout></ProtectedRoute>} />
+<Route path="/tai-xe" element={<ProtectedRoute roles={["DRIVER"]}><Navigate to="/tai-xe/chuyen" replace /></ProtectedRoute>} />
 <Route path="/tai-xe/chuyen" element={<ProtectedRoute roles={["DRIVER"]}><DashboardLayout type="driver"><DriverJobs/></DashboardLayout></ProtectedRoute>} />
-<Route path="/tai-xe/chuyen/:tripId" element={<ProtectedRoute roles={["DRIVER"]}><DashboardLayout type="driver"><DriverTripDetail/></DashboardLayout></ProtectedRoute>} />
+<Route path="/tai-xe/chuyen/:tripId" element={<ProtectedRoute roles={["DRIVER"]}><DashboardLayout type="driver"><DriverJobs/></DashboardLayout></ProtectedRoute>} />
 <Route path="/tai-xe/thong-bao" element={<ProtectedRoute roles={["DRIVER"]}><DashboardLayout type="driver"><DriverNotifications/></DashboardLayout></ProtectedRoute>} />
 <Route path="/tai-xe/san-sang" element={<ProtectedRoute roles={["DRIVER"]}><DashboardLayout type="driver"><DriverAvailability/></DashboardLayout></ProtectedRoute>} />
 <Route path="/tai-xe/cong-no" element={<ProtectedRoute roles={["DRIVER"]}><DashboardLayout type="driver"><DriverDebts/></DashboardLayout></ProtectedRoute>} />

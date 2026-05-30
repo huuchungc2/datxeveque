@@ -10,14 +10,23 @@ import { requireAuth, requireRoles } from "../middleware/auth.js";
 import { hashPassword } from "../lib/auth.js";
 import { generateCode } from "../lib/codes.js";
 import { buildDispatchSuggestions, computeDispatchSeatSummary } from "../lib/dispatchSuggestions.js";
-import { buildDispatchOptionsForSuggestion } from "../lib/dispatchOptions.js";
+import { buildDispatchOptionsForSuggestion, enrichBookingDispatchSeats } from "../lib/dispatchOptions.js";
+import { bookingNeedsDispatch } from "../lib/bookingSeats.js";
 import {
   assertDriverAvailableForNewTrip,
   buildAvailableDriverWhere,
   getBusyDriverIds,
 } from "../lib/dispatchDrivers.js";
 import { completeTrip } from "../lib/tripComplete.js";
+import {
+  buildPaidByTrip,
+  enrichTripDebtRow,
+  loadPaymentsForTrips,
+  validateSettlementPayment,
+  computeSettlementStatus,
+} from "../lib/tripSettlement.js";
 import { adminCreateBooking, patchBookingAdmin } from "../lib/adminBooking.js";
+import { patchBookingDriverStatus } from "../lib/adminBookingDriverStatus.js";
 import { getAdminDashboard } from "../lib/adminDashboard.js";
 import { cancelBookingAdmin, confirmBookingAdmin } from "../lib/bookingConfirm.js";
 import { moveBookingBetweenTrips } from "../lib/bookingMoveTrip.js";
@@ -25,7 +34,9 @@ import { parsePageQuery, toNumberOrUndefined } from "../lib/pagination.js";
 import { buildAdminRouteListWhere, normalizeRouteLocked, publicRouteWhere } from "../lib/routes.js";
 import { normalizeVnPhone, PHONE_INVALID_MESSAGE } from "../lib/phone.js";
 import { createAdminUser, updateAdminUser, userInclude } from "../lib/adminUser.js";
-import { applyDispatchSuggestion, assignBookingsToTrip } from "../lib/dispatchApply.js";
+import { patchAdminDriver } from "../lib/driverAvailability.js";
+import { applyDispatchSuggestion, assignBookingsToTrip, assignDriverToTrip } from "../lib/dispatchApply.js";
+import { loadDispatchBoard } from "../lib/dispatchBoard.js";
 import { sendTelegramTest, telegramNotifyEnabled } from "../lib/telegramNotify.js";
 import { parseScheduledAtDateRange } from "../lib/datetime.js";
 import {
@@ -193,9 +204,22 @@ adminRouter.patch("/users/:id", adminOnly, async (req, res) => {
 });
 
 adminRouter.post("/users/:id/reset-password", adminOnly, async (req, res) => {
-  const password = req.body.password || "123456";
-  await prisma.user.update({ where: { id: Number(req.params.id) }, data: { passwordHash: await hashPassword(password) } });
-  res.json({ message: "Đã reset mật khẩu", password });
+  const password = String(req.body.password || "").trim();
+  if (password.length < 6) {
+    return res.status(400).json({ message: "Mật khẩu tối thiểu 6 ký tự" });
+  }
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id < 1) {
+    return res.status(400).json({ message: "ID người dùng không hợp lệ" });
+  }
+  try {
+    await prisma.user.update({ where: { id }, data: { passwordHash: await hashPassword(password) } });
+    res.json({ message: "Đã đặt lại mật khẩu" });
+  } catch (error: any) {
+    if (error?.code === "P2025") return res.status(404).json({ message: "Không tìm thấy người dùng" });
+    console.error("POST /admin/users/:id/reset-password error:", error);
+    res.status(500).json({ message: "Không đặt lại được mật khẩu" });
+  }
 });
 
 adminRouter.patch("/users/:id/status", adminOnly, async (req, res) => {
@@ -203,7 +227,11 @@ adminRouter.patch("/users/:id/status", adminOnly, async (req, res) => {
   res.json(user);
 });
 
-const driverListInclude = { vehicles: true, user: { select: { id: true, phone: true, status: true, role: true, name: true } } };
+const driverListInclude = {
+  vehicles: true,
+  route: { select: { id: true, name: true, direction: true } },
+  user: { select: { id: true, phone: true, status: true, role: true, name: true } },
+};
 
 function buildDriverListWhere(query: Record<string, unknown>) {
   const where: any = {};
@@ -283,18 +311,18 @@ adminRouter.patch("/drivers/:id/account-status", adminOnly, async (req, res) => 
 
 adminRouter.patch("/drivers/:id", async (req, res) => {
   try {
-    const data: any = { ...req.body };
-    if (data.phone !== undefined) {
-      const phone = normalizeVnPhone(data.phone);
+    const body: Record<string, unknown> = { ...req.body };
+    if (body.phone !== undefined) {
+      const phone = normalizeVnPhone(String(body.phone));
       if (!phone) return res.status(400).json({ message: PHONE_INVALID_MESSAGE });
-      data.phone = phone;
+      body.phone = phone;
     }
-    if (data.zaloPhone !== undefined && data.zaloPhone) {
-      const zalo = normalizeVnPhone(data.zaloPhone);
+    if (body.zaloPhone !== undefined && body.zaloPhone) {
+      const zalo = normalizeVnPhone(String(body.zaloPhone));
       if (!zalo) return res.status(400).json({ message: "Số Zalo phải đủ 10 chữ số, bắt đầu bằng 0" });
-      data.zaloPhone = zalo;
+      body.zaloPhone = zalo;
     }
-    const driver = await prisma.driver.update({ where: { id: Number(req.params.id) }, data });
+    const driver = await patchAdminDriver(Number(req.params.id), body);
     res.json(driver);
   } catch (error: any) {
     res.status(error.statusCode || 500).json({ message: error.message || "Không cập nhật tài xế" });
@@ -370,74 +398,8 @@ const UNASSIGNED_STATUSES: BookingStatus[] = [
 
 adminRouter.get("/dispatch", async (req, res) => {
   try {
-    const whereBooking: any = {
-      tripBookings: { none: {} },
-      status: { in: UNASSIGNED_STATUSES },
-    };
-    const whereTrip: any = { status: { in: [TripStatus.COLLECTING, TripStatus.READY] } };
-    const busyDriverIds = await getBusyDriverIds();
-    const whereDriver: any = buildAvailableDriverWhere(busyDriverIds);
-
-    if (req.query.routeId) {
-      const routeId = Number(req.query.routeId);
-      whereBooking.routeId = routeId;
-      whereTrip.routeId = routeId;
-    }
-    if (req.query.type) whereBooking.type = req.query.type;
-    if (req.query.q) {
-      const q = String(req.query.q);
-      whereBooking.OR = [{ customerName: { contains: q } }, { customerPhone: { contains: q } }, { code: { contains: q } }];
-    }
-    const dispatchDateRange = parseScheduledAtDateRange(req.query.from, req.query.to);
-    if (dispatchDateRange) {
-      whereBooking.scheduledAt = dispatchDateRange;
-      whereTrip.departureAt = dispatchDateRange;
-    }
-    if (req.query.direction) {
-      whereBooking.direction = { contains: String(req.query.direction) };
-      whereDriver.direction = { contains: String(req.query.direction) };
-    }
-    if (req.query.seatsNeeded) {
-      const seats = Number(req.query.seatsNeeded);
-      if (Number.isFinite(seats)) whereDriver.vehicles = { some: { seats: { gte: seats } } };
-    }
-
-    const [unassignedBookings, collectingTrips, availableDrivers, routes] = await Promise.all([
-      prisma.booking.findMany({
-        where: whereBooking,
-        include: { route: true },
-        orderBy: [{ createdAt: "desc" }, { scheduledAt: "desc" }],
-        take: 100,
-      }),
-      prisma.trip.findMany({
-        where: whereTrip,
-        include: { route: true, driver: true, vehicle: true, tripBookings: { include: { booking: true } } },
-        orderBy: [{ departureAt: "desc" }, { createdAt: "desc" }],
-        take: 50,
-      }),
-      prisma.driver.findMany({ where: whereDriver, include: { vehicles: true }, orderBy: { id: "asc" } }),
-      prisma.route.findMany({ where: publicRouteWhere(), orderBy: { id: "asc" } }),
-    ]);
-
-    const suggestions = buildDispatchSuggestions(unassignedBookings, collectingTrips, availableDrivers);
-    const seatSummary = computeDispatchSeatSummary(unassignedBookings);
-
-    res.json({
-      unassignedBookings: serializeBookings(unassignedBookings),
-      collectingTrips,
-      availableDrivers,
-      routes,
-      suggestions: suggestions.map((s) => ({
-        ...s,
-        dispatchOptions: buildDispatchOptionsForSuggestion({
-          suggestion: s,
-          unassignedBookings,
-          collectingTrips,
-          availableDrivers,
-        }),
-      })),
-      seatSummary,
-    });
+    const payload = await loadDispatchBoard(req.query as Record<string, unknown>);
+    res.json(payload);
   } catch (error) {
     console.error("GET /admin/dispatch error:", error);
     res.status(500).json({ message: "Không tải được dữ liệu điều phối" });
@@ -456,7 +418,6 @@ adminRouter.post("/dispatch/apply", async (req, res) => {
 
 async function loadDispatchContext(query: Record<string, unknown>) {
   const whereBooking: any = {
-    tripBookings: { none: {} },
     status: { in: UNASSIGNED_STATUSES },
   };
   const whereTrip: any = { status: { in: [TripStatus.COLLECTING, TripStatus.READY] } };
@@ -500,10 +461,10 @@ async function loadDispatchContext(query: Record<string, unknown>) {
     }
   }
 
-  const [unassignedBookings, collectingTrips, availableDrivers, routes] = await Promise.all([
+  const [bookingCandidates, collectingTrips, availableDrivers, routes] = await Promise.all([
     prisma.booking.findMany({
       where: whereBooking,
-      include: { route: true },
+      include: { route: true, tripBookings: true },
       orderBy: [{ createdAt: "desc" }, { scheduledAt: "desc" }],
     }),
     prisma.trip.findMany({
@@ -515,6 +476,9 @@ async function loadDispatchContext(query: Record<string, unknown>) {
     prisma.route.findMany({ where: publicRouteWhere(), orderBy: { id: "asc" } }),
   ]);
 
+  const unassignedBookings = bookingCandidates.filter((b) =>
+    bookingNeedsDispatch(b, UNASSIGNED_STATUSES as string[])
+  );
   return { unassignedBookings, collectingTrips, availableDrivers, routes };
 }
 
@@ -593,10 +557,13 @@ adminRouter.post("/dispatch/bookings/:bookingId/confirm", async (req, res) => {
       return res.status(400).json({ message: picked?.disabledReason || "Phương án không đủ điều kiện" });
     }
 
+    const seatCounts: Record<number, number> = {};
+    if (picked.seatsAssignable > 0) seatCounts[bookingId] = picked.seatsAssignable;
+
     let body: any;
     if (optionType === "EXISTING_TRIP") {
       const tripId = Number(String(key).replace(/^trip:/, ""));
-      body = { kind: "assign_trip", bookingIds: [bookingId], tripId };
+      body = { kind: "assign_trip", bookingIds: [bookingId], tripId, seatCounts };
     } else if (optionType === "AVAILABLE_DRIVER") {
       const driverId = Number(String(key).replace(/^driver:/, "").replace(/:busy$/, ""));
       if (!booking.scheduledAt) {
@@ -612,6 +579,7 @@ adminRouter.post("/dispatch/bookings/:bookingId/confirm", async (req, res) => {
         totalSeats: Number(vehicle?.seats || 7),
         driverId,
         vehicleId: vehicle?.id ?? null,
+        seatCounts,
       };
     } else {
       return res.status(400).json({ message: "optionType không hợp lệ" });
@@ -735,6 +703,23 @@ adminRouter.get("/trips", async (req, res) => {
         driver: true,
         vehicle: true,
         _count: { select: { tripBookings: true } },
+        tripBookings: {
+          select: {
+            id: true,
+            seatCount: true,
+            booking: {
+              select: {
+                id: true,
+                code: true,
+                customerName: true,
+                type: true,
+                driverRideStatus: true,
+                driverCargoStatus: true,
+              },
+            },
+          },
+          orderBy: { createdAt: "asc" },
+        },
       },
       orderBy,
       skip,
@@ -764,6 +749,19 @@ adminRouter.get("/trips/:id", async (req, res) => {
   });
   if (!trip) return res.status(404).json({ message: "Không tìm thấy chuyến" });
   res.json(trip);
+});
+
+adminRouter.post("/trips/:tripId/bookings/:bookingId/driver-status", async (req, res) => {
+  try {
+    const result = await patchBookingDriverStatus(
+      Number(req.params.tripId),
+      Number(req.params.bookingId),
+      req.body
+    );
+    res.json(result);
+  } catch (error: any) {
+    res.status(error.statusCode || 500).json({ message: error.message || "Không cập nhật trạng thái" });
+  }
 });
 
 adminRouter.post("/trips", async (req, res) => {
@@ -803,6 +801,14 @@ adminRouter.patch("/trips/:id", async (req, res) => {
     if (req.body.status === TripStatus.COMPLETED) {
       const result = await completeTrip(tripId, { completedBy: "ADMIN", userId: req.user?.id });
       return res.json(result);
+    }
+
+    if (req.body.driverId !== undefined && req.body.driverId && !req.body.status) {
+      const existing = await prisma.trip.findUnique({ where: { id: tripId }, select: { driverId: true } });
+      if (!existing?.driverId) {
+        const result = await assignDriverToTrip(tripId, Number(req.body.driverId), req.body.vehicleId);
+        return res.json(result.trip);
+      }
     }
 
     if (req.body.driverId) await assertDriverAvailableForNewTrip(Number(req.body.driverId));
@@ -857,7 +863,18 @@ adminRouter.post("/trips/:id/add-bookings", async (req, res) => {
     const bookingIds = Array.from(new Set(rawBookingIds.map(Number).filter(Boolean))) as number[];
     if (!bookingIds.length) return res.status(400).json({ message: "Chưa chọn đơn để gán" });
 
-    const result = await assignBookingsToTrip(tripId, bookingIds);
+    const seatCounts: Record<number, number> = {};
+    const raw = req.body.seatCounts;
+    if (raw && typeof raw === "object") {
+      for (const [k, v] of Object.entries(raw)) {
+        const id = Number(k);
+        const n = Number(v);
+        if (id && Number.isFinite(n) && n > 0) seatCounts[id] = Math.floor(n);
+      }
+    }
+    const result = await assignBookingsToTrip(tripId, bookingIds, {
+      seatCounts: Object.keys(seatCounts).length ? seatCounts : undefined,
+    });
     res.json({ ok: true, ...result });
   } catch (error: any) {
     console.error("POST /admin/trips/:id/add-bookings error:", error);
@@ -867,17 +884,15 @@ adminRouter.post("/trips/:id/add-bookings", async (req, res) => {
 
 adminRouter.get("/reports/overview", async (req, res) => {
   const where: any = {};
-  if (req.query.driverId) where.driverId = Number(req.query.driverId);
-  if (req.query.routeId) where.routeId = Number(req.query.routeId);
+  const driverId = toNumberOrUndefined(req.query.driverId);
+  if (driverId != null && driverId > 0) where.driverId = driverId;
+  const routeId = toNumberOrUndefined(req.query.routeId);
+  if (routeId != null && routeId > 0) where.routeId = routeId;
   if (req.query.serviceType) {
     where.tripBookings = { some: { booking: { type: String(req.query.serviceType) } } };
   }
-  if (req.query.from || req.query.to) {
-    where.departureAt = {
-      gte: req.query.from ? new Date(String(req.query.from)) : undefined,
-      lte: req.query.to ? new Date(String(req.query.to)) : undefined,
-    };
-  }
+  const departureRange = parseScheduledAtDateRange(req.query.from, req.query.to);
+  if (departureRange) where.departureAt = departureRange;
   const trips = await prisma.trip.findMany({
     where,
     include: { route: true, driver: true, tripBookings: { include: { booking: true } } },
@@ -895,38 +910,15 @@ adminRouter.get("/reports/overview", async (req, res) => {
   });
 });
 
-function buildPaidByTrip(payments: { tripId: number | null; amount: unknown; direction: string }[]) {
-  const paidByTrip = new Map<number, { driverPaid: number; adminPaid: number }>();
-  for (const p of payments) {
-    if (!p.tripId) continue;
-    const cur = paidByTrip.get(p.tripId) || { driverPaid: 0, adminPaid: 0 };
-    const amt = Number(p.amount);
-    if (p.direction === "DRIVER_OWES_ADMIN") cur.driverPaid += amt;
-    if (p.direction === "ADMIN_OWES_DRIVER") cur.adminPaid += amt;
-    paidByTrip.set(p.tripId, cur);
-  }
-  return paidByTrip;
-}
-
-function enrichTripDebtRow(
-  t: { id: number; driverDebtAmount: unknown; adminOwesDriverAmount?: unknown },
-  paidByTrip: Map<number, { driverPaid: number; adminPaid: number }>
-) {
-  const paid = paidByTrip.get(t.id) || { driverPaid: 0, adminPaid: 0 };
-  const driverDebt = Number(t.driverDebtAmount);
-  const adminOwes = Number(t.adminOwesDriverAmount || 0);
-  return {
-    driverPaidAdmin: paid.driverPaid,
-    adminPaidDriver: paid.adminPaid,
-    driverDebtRemaining: Math.max(0, driverDebt - paid.driverPaid),
-    adminOwesRemaining: Math.max(0, adminOwes - paid.adminPaid),
-  };
-}
-
 adminRouter.get("/reports/debts", async (req, res) => {
   const where: any = {};
   if (req.query.driverId) where.driverId = Number(req.query.driverId);
   if (req.query.settlementStatus) where.settlementStatus = req.query.settlementStatus;
+  if (req.query.tripStatus) {
+    where.status = String(req.query.tripStatus);
+  } else if (req.query.includeOpen !== "1") {
+    where.status = TripStatus.COMPLETED;
+  }
   const { page, limit, skip } = parsePageQuery(req.query, { page: 1, limit: 20 });
 
   const summaryTrips = await prisma.trip.findMany({
@@ -934,13 +926,7 @@ adminRouter.get("/reports/debts", async (req, res) => {
     select: { id: true, driverId: true, driverDebtAmount: true, adminOwesDriverAmount: true },
   });
   const summaryTripIds = summaryTrips.map((t) => t.id);
-  const summaryDriverIds = [...new Set(summaryTrips.map((t) => t.driverId).filter(Boolean))] as number[];
-  const summaryPayments =
-    summaryTripIds.length || summaryDriverIds.length
-      ? await prisma.driverSettlementPayment.findMany({
-          where: { OR: [{ tripId: { in: summaryTripIds } }, { driverId: { in: summaryDriverIds } }] },
-        })
-      : [];
+  const summaryPayments = await loadPaymentsForTrips(summaryTripIds);
   const summaryPaidByTrip = buildPaidByTrip(summaryPayments);
   let totalDriverDebt = 0;
   let totalAdminOwesDriver = 0;
@@ -962,12 +948,10 @@ adminRouter.get("/reports/debts", async (req, res) => {
   ]);
 
   const recentPaymentsRaw =
-    summaryTripIds.length || summaryDriverIds.length
-      ? await prisma.driverSettlementPayment.findMany({
-          where: { OR: [{ tripId: { in: summaryTripIds } }, { driverId: { in: summaryDriverIds } }] },
-          orderBy: { createdAt: "desc" },
-          take: 10,
-        })
+    summaryTripIds.length > 0
+      ? (
+          await loadPaymentsForTrips(summaryTripIds)
+        ).slice(0, 10)
       : [];
   const recentDriverIds = [...new Set(recentPaymentsRaw.map((p) => p.driverId))];
   const recentTripIds = [...new Set(recentPaymentsRaw.map((p) => p.tripId).filter(Boolean))] as number[];
@@ -988,13 +972,7 @@ adminRouter.get("/reports/debts", async (req, res) => {
   }));
 
   const pageTripIds = trips.map((t) => t.id);
-  const pageDriverIds = [...new Set(trips.map((t) => t.driverId).filter(Boolean))] as number[];
-  const pagePayments =
-    pageTripIds.length || pageDriverIds.length
-      ? await prisma.driverSettlementPayment.findMany({
-          where: { OR: [{ tripId: { in: pageTripIds } }, { driverId: { in: pageDriverIds } }] },
-        })
-      : [];
+  const pagePayments = await loadPaymentsForTrips(pageTripIds);
   const paidByTrip = buildPaidByTrip(pagePayments);
   const rows = trips.map((t) => ({
     ...t,
@@ -1024,39 +1002,40 @@ adminRouter.get("/settlements", async (req, res) => {
 adminRouter.post("/settlements", async (req, res) => {
   try {
     const { tripId, driverId, amount, direction, method, note } = req.body;
-    if (!driverId || !amount || !direction) return res.status(400).json({ message: "Thiếu tài xế, số tiền hoặc chiều thanh toán" });
+    if (!driverId || amount == null || !direction) {
+      return res.status(400).json({ message: "Thiếu tài xế, số tiền hoặc chiều thanh toán" });
+    }
+    const tripIdNum = tripId ? Number(tripId) : null;
+    const validated = await validateSettlementPayment({
+      tripId: tripIdNum,
+      driverId: Number(driverId),
+      amount: Number(amount),
+      direction: String(direction),
+    });
+
     const payment = await prisma.driverSettlementPayment.create({
       data: {
-        tripId: tripId ? Number(tripId) : null,
+        tripId: tripIdNum,
         driverId: Number(driverId),
-        amount: Number(amount),
-        direction: String(direction),
+        amount: validated.amount,
+        direction: validated.direction,
         method: method || "Tiền mặt",
         note: note || null,
       },
     });
-    if (tripId) {
-      const trip = await prisma.trip.findUnique({ where: { id: Number(tripId) } });
-      if (trip) {
-        const pays = await prisma.driverSettlementPayment.findMany({ where: { tripId: Number(tripId) } });
-        let driverPaid = 0;
-        let adminPaid = 0;
-        for (const p of pays) {
-          const a = Number(p.amount);
-          if (p.direction === "DRIVER_OWES_ADMIN") driverPaid += a;
-          if (p.direction === "ADMIN_OWES_DRIVER") adminPaid += a;
-        }
-        const driverRem = Math.max(0, Number(trip.driverDebtAmount) - driverPaid);
-        const adminRem = Math.max(0, Number((trip as any).adminOwesDriverAmount || 0) - adminPaid);
-        let settlementStatus: SettlementStatus = SettlementStatus.PARTIAL;
-        if (driverRem <= 0 && adminRem <= 0) settlementStatus = SettlementStatus.PAID;
-        await prisma.trip.update({ where: { id: trip.id }, data: { settlementStatus } });
-      }
+
+    if (tripIdNum && validated.trip) {
+      const pays = await loadPaymentsForTrips([tripIdNum]);
+      const paidByTrip = buildPaidByTrip(pays);
+      const paid = paidByTrip.get(tripIdNum) || { driverPaid: 0, adminPaid: 0 };
+      const settlementStatus = computeSettlementStatus(validated.trip, paid.driverPaid, paid.adminPaid);
+      await prisma.trip.update({ where: { id: tripIdNum }, data: { settlementStatus } });
     }
+
     res.json({ message: "Đã ghi nhận thanh toán", payment });
-  } catch (error) {
+  } catch (error: any) {
     console.error("POST /admin/settlements error:", error);
-    res.status(500).json({ message: "Không ghi nhận được thanh toán" });
+    res.status(error.statusCode || 500).json({ message: error.message || "Không ghi nhận được thanh toán" });
   }
 });
 

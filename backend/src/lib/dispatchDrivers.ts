@@ -68,6 +68,44 @@ export async function assertDriverUserActive(driverId: number, driverName?: stri
   }
 }
 
+/** Chuyến chưa xong khác `exceptTripId` (nếu có) — một tài xế chỉ một chuyến COLLECTING/READY/IN_PROGRESS */
+export async function findDriverOtherBusyTrip(driverId: number, exceptTripId?: number) {
+  return prisma.trip.findFirst({
+    where: {
+      driverId,
+      status: { in: TRIP_BUSY_STATUSES },
+      ...(exceptTripId ? { id: { not: exceptTripId } } : {}),
+    },
+    select: { id: true, code: true, status: true, routeId: true },
+  });
+}
+
+export async function assertDriverHasNoOtherBusyTrip(driverId: number, exceptTripId?: number) {
+  const driver = await prisma.driver.findUnique({ where: { id: driverId } });
+  if (!driver) throw Object.assign(new Error("Không tìm thấy tài xế"), { statusCode: 404 });
+
+  const onTrip = await findDriverOtherBusyTrip(driverId, exceptTripId);
+  if (!onTrip) return;
+
+  const msg = exceptTripId
+    ? `Bạn đang có chuyến ${onTrip.code} (${onTrip.status}). Hoàn thành hoặc từ chối chuyến đó trước khi nhận chuyến khác.`
+    : `Tài xế ${driver.name} đang có chuyến ${onTrip.code} (${onTrip.status}). Chỉ gom thêm khách vào chuyến đó, hoặc chờ hoàn thành/hủy chuyến mới gán chuyến khác.`;
+
+  throw Object.assign(new Error(msg), { statusCode: 400 });
+}
+
+/** Sau từ chối / hủy / hoàn thành — bỏ «Đang chạy chuyến» nếu không còn chuyến busy */
+export async function syncDriverIdleFromTrips(driverId: number) {
+  const busy = await findDriverOtherBusyTrip(driverId);
+  if (busy) return;
+  const driver = await prisma.driver.findUnique({ where: { id: driverId } });
+  if (!driver || driver.status !== "Đang chạy chuyến") return;
+  await prisma.driver.update({
+    where: { id: driverId },
+    data: { status: DRIVER_IDLE_STATUS },
+  });
+}
+
 export async function assertDriverAvailableForNewTrip(driverId: number) {
   const driver = await prisma.driver.findUnique({ where: { id: driverId } });
   if (!driver) throw Object.assign(new Error("Không tìm thấy tài xế"), { statusCode: 404 });
@@ -81,15 +119,12 @@ export async function assertDriverAvailableForNewTrip(driverId: number) {
   if (Number(driver.seatsFree) <= 0) {
     throw Object.assign(new Error(`Tài xế ${driver.name} báo 0 ghế rảnh`), { statusCode: 400 });
   }
-
-  const onTrip = await prisma.trip.findFirst({
-    where: { driverId, status: { in: TRIP_BUSY_STATUSES } },
-    select: { code: true, status: true },
-  });
-  if (onTrip) {
+  if (driver.runDirection !== "SG_TO_PROVINCE" && driver.runDirection !== "PROVINCE_TO_SG") {
     throw Object.assign(
-      new Error(`Tài xế ${driver.name} đang có chuyến ${onTrip.code} (${onTrip.status}), không gán chuyến mới`),
+      new Error(`Tài xế ${driver.name} chưa chọn chiều chạy — cần khai báo tại «Báo rảnh / bận»`),
       { statusCode: 400 }
     );
   }
+
+  await assertDriverHasNoOtherBusyTrip(driverId);
 }

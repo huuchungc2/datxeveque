@@ -1,12 +1,30 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { Car, Filter, MapPin, Search, Truck, Users, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { Car, Filter, Search, Truck, Users, X } from "lucide-react";
+import { RouteCell } from "../components/ui/RouteCell";
+import { routePrimaryLabel } from "../lib/routeDisplay";
 import { api, formatMoney } from "../lib/api";
-import { fmtDepartureTime } from "../lib/datetime";
+import { ensureAppTime } from "../lib/appTime";
+import { fmtDepartureTime, todayLocalDateValue } from "../lib/datetime";
 import { PageTitle, StatCard, dashboardIcons } from "../components/ui/AdminCharts";
 import { GregorianDateInput } from "../components/ui/GregorianDateInputs";
 import { getVisiblePageNumbers } from "../lib/paginationUi";
-import { SETTLEMENT_STATUS_VI, TRIP_STATUS_VI, settlementStatus, tripStatus } from "../lib/vi";
+import {
+  DRIVER_CARGO_STATUS_VI,
+  DRIVER_RIDE_STATUS_VI,
+  SETTLEMENT_STATUS_VI,
+  TRIP_STATUS_VI,
+  driverCargoStatus,
+  driverRideStatus,
+  settlementStatus,
+  tripStatus,
+} from "../lib/vi";
+import {
+  rideStatusBadgeClass,
+  summarizeTripBookings,
+  tripProgressLabel,
+  type TripBookingRow,
+} from "../lib/tripPassengers";
 
 type TripRow = {
   id: number;
@@ -24,6 +42,7 @@ type TripRow = {
   driver?: { name?: string; phone?: string } | null;
   vehicle?: { licensePlate?: string; vehicleType?: string } | null;
   _count?: { tripBookings?: number };
+  tripBookings?: TripBookingRow[];
 };
 
 type Filters = {
@@ -32,8 +51,6 @@ type Filters = {
   settlementStatus: string;
   routeId: string;
   driverId: string;
-  from: string;
-  to: string;
   minAvailableSeats: string;
   debtMin: string;
   sortBy: string;
@@ -42,14 +59,14 @@ type Filters = {
   pageSize: number;
 };
 
+type FilterDraft = Filters & { from: string; to: string };
+
 const defaultFilters = (): Filters => ({
   keyword: "",
   status: "",
   settlementStatus: "",
   routeId: "",
   driverId: "",
-  from: "",
-  to: "",
   minAvailableSeats: "",
   debtMin: "",
   sortBy: "departureAt",
@@ -58,12 +75,60 @@ const defaultFilters = (): Filters => ({
   pageSize: 20,
 });
 
+const defaultDraft = (): FilterDraft => {
+  const today = todayLocalDateValue();
+  return { ...defaultFilters(), from: today, to: today };
+};
+
 function tripStatusBadgeClass(status: string) {
   if (status === "COMPLETED") return "badge-success";
   if (status === "CANCELLED") return "badge-danger";
   if (status === "IN_PROGRESS") return "badge-info";
   if (status === "READY") return "badge-warning";
   return "badge-info";
+}
+
+function TripCustomersSummary({ tripBookings, onOpen }: { tripBookings?: TripBookingRow[]; onOpen?: () => void }) {
+  const rows = tripBookings || [];
+  const summary = summarizeTripBookings(rows);
+  if (!summary.totalOrders) {
+    return <p className="text-xs text-slate-500">Chưa có khách/đơn</p>;
+  }
+
+  return (
+    <button type="button" className="w-full text-left" onClick={onOpen}>
+      <p className="text-xs font-semibold text-brand-700">{tripProgressLabel(summary)}</p>
+      <ul className="mt-1.5 max-h-36 space-y-1 overflow-y-auto pr-1">
+        {rows.map((tb) => {
+          const b = tb.booking;
+          if (!b?.code) return null;
+          const isCargo = b.type === "CARGO";
+          const rideSt = isCargo ? b.driverCargoStatus : b.driverRideStatus;
+          const rideLabel = isCargo
+            ? driverCargoStatus(b.driverCargoStatus)
+            : driverRideStatus(b.driverRideStatus);
+          return (
+            <li
+              key={tb.id ?? b.id ?? b.code}
+              className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 rounded-lg border border-slate-100 bg-white/80 px-1.5 py-1"
+            >
+              <span className="font-mono text-[11px] font-bold text-brand-800">{b.code}</span>
+              {Number(tb.seatCount) > 1 && (
+                <span className="text-[10px] font-semibold text-slate-500">{tb.seatCount} ghế</span>
+              )}
+              <span className={`badge shrink-0 py-0 text-[10px] leading-tight ${rideStatusBadgeClass(rideSt, isCargo)}`}>
+                {rideLabel}
+              </span>
+              {b.customerName && (
+                <span className="w-full truncate text-[11px] text-slate-600">{b.customerName}</span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      <p className="mt-1 text-[10px] text-slate-500">Bấm xem chi tiết từng đơn</p>
+    </button>
+  );
 }
 
 function SeatMeter({ booked = 0, total = 0, available = 0 }: { booked?: number; total?: number; available?: number }) {
@@ -120,6 +185,7 @@ function TripQuickActions({
 }
 
 export function AdminTrips() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [items, setItems] = useState<TripRow[]>([]);
   const [routes, setRoutes] = useState<{ id: number; name: string }[]>([]);
   const [drivers, setDrivers] = useState<{ id: number; name: string; phone?: string }[]>([]);
@@ -128,55 +194,95 @@ export function AdminTrips() {
   const [actionBusyId, setActionBusyId] = useState<number | null>(null);
   const [meta, setMeta] = useState({ page: 1, pageSize: 20, total: 0, totalPages: 1 });
   const [filters, setFilters] = useState<Filters>(defaultFilters);
-  const [draft, setDraft] = useState<Filters>(defaultFilters);
+  const [draft, setDraft] = useState<FilterDraft>(defaultDraft);
 
-  const load = async (next?: Partial<Filters>) => {
-    const params: Record<string, unknown> = { ...filters, ...(next || {}) };
-    for (const k of Object.keys(params)) {
-      if (params[k] === "" || params[k] == null) params[k] = undefined;
-    }
-    setLoading(true);
-    try {
-      const r = await api.get("/admin/trips", { params });
-      setItems(r.data?.items || []);
-      setMeta({
-        page: Number(r.data?.page || 1),
-        pageSize: Number(r.data?.pageSize || 20),
-        total: Number(r.data?.total || 0),
-        totalPages: Number(r.data?.totalPages || 1),
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+  /** Mặc định: chuyến trong ngày hôm nay (theo giờ server VN) */
+  useEffect(() => {
+    const from = searchParams.get("from");
+    const to = searchParams.get("to");
+    if (from && to) return;
+    void ensureAppTime().then(() => {
+      const today = todayLocalDateValue();
+      const next = new URLSearchParams(searchParams);
+      if (!from) next.set("from", today);
+      if (!to) next.set("to", from || today);
+      if (!searchParams.get("page")) next.set("page", "1");
+      setSearchParams(next, { replace: true });
+    });
+  }, [searchParams, setSearchParams]);
+
+  const dateFilters = useMemo(() => {
+    const today = todayLocalDateValue();
+    const from = searchParams.get("from") || today;
+    const to = searchParams.get("to") || from;
+    return { from, to };
+  }, [searchParams]);
+
+  const pageFromUrl = Number(searchParams.get("page") || 1);
 
   useEffect(() => {
-    load();
-    api.get("/admin/routes").then((r) => setRoutes(r.data));
-    api.get("/admin/drivers").then((r) => setDrivers(r.data));
-  }, []);
-
-  useEffect(() => {
-    setDraft(filters);
-  }, [filters]);
+    setDraft((prev) => ({
+      ...prev,
+      ...filters,
+      from: dateFilters.from,
+      to: dateFilters.to,
+      page: pageFromUrl,
+    }));
+  }, [
+    filters.keyword,
+    filters.status,
+    filters.settlementStatus,
+    filters.routeId,
+    filters.driverId,
+    filters.minAvailableSeats,
+    filters.debtMin,
+    filters.sortBy,
+    filters.sortDir,
+    filters.pageSize,
+    dateFilters.from,
+    dateFilters.to,
+    pageFromUrl,
+  ]);
 
   const applyFilters = () => {
-    const next = { ...draft, page: 1 };
+    const today = todayLocalDateValue();
+    let from = draft.from?.trim() || today;
+    let to = draft.to?.trim() || today;
+    if (from > to) [from, to] = [to, from];
+    const next: Filters = {
+      keyword: draft.keyword,
+      status: draft.status,
+      settlementStatus: draft.settlementStatus,
+      routeId: draft.routeId,
+      driverId: draft.driverId,
+      minAvailableSeats: draft.minAvailableSeats,
+      debtMin: draft.debtMin,
+      sortBy: draft.sortBy,
+      sortDir: draft.sortDir,
+      page: 1,
+      pageSize: draft.pageSize,
+    };
     setFilters(next);
-    load(next);
+    const sp = new URLSearchParams(searchParams);
+    sp.set("from", from);
+    sp.set("to", to);
+    sp.set("page", "1");
+    setSearchParams(sp);
   };
 
   const clearFilters = () => {
+    const today = todayLocalDateValue();
     const next = defaultFilters();
-    setDraft(next);
     setFilters(next);
-    load(next);
+    setDraft({ ...next, from: today, to: today });
+    setSearchParams({ from: today, to: today, page: "1" });
   };
 
   const setPage = (page: number) => {
-    const next = { ...filters, page };
-    setFilters(next);
-    load(next);
+    setFilters((prev) => ({ ...prev, page }));
+    const sp = new URLSearchParams(searchParams);
+    sp.set("page", String(page));
+    setSearchParams(sp);
   };
 
   const pageStats = useMemo(() => {
@@ -192,14 +298,124 @@ export function AdminTrips() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [moveTargetTripId, setMoveTargetTripId] = useState("");
   const [movingBookingId, setMovingBookingId] = useState<number | null>(null);
+  const [assignDrivers, setAssignDrivers] = useState<{ id: number; name: string; vehicles?: { id: number; seats: number; licensePlate?: string }[] }[]>([]);
+  const [assignDriverId, setAssignDriverId] = useState("");
+  const [assigningDriver, setAssigningDriver] = useState(false);
+  const [statusBusyBookingId, setStatusBusyBookingId] = useState<number | null>(null);
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
+
+  const mergeTripIntoList = (trip: TripRow) => {
+    setItems((prev) =>
+      prev.map((t) =>
+        t.id === trip.id
+          ? {
+              ...t,
+              status: trip.status,
+              tripBookings: trip.tripBookings,
+              bookedSeats: trip.bookedSeats,
+              availableSeats: trip.availableSeats,
+            }
+          : t
+      )
+    );
+  };
+
+  const load = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      if (!searchParams.get("from")) return;
+      const params: Record<string, unknown> = {
+        ...filtersRef.current,
+        from: dateFilters.from,
+        to: dateFilters.to,
+        page: pageFromUrl,
+      };
+      for (const k of Object.keys(params)) {
+        if (params[k] === "" || params[k] == null) params[k] = undefined;
+      }
+      if (!opts?.silent) setLoading(true);
+      try {
+        const r = await api.get("/admin/trips", { params });
+        setItems(r.data?.items || []);
+        setMeta({
+          page: Number(r.data?.page || 1),
+          pageSize: Number(r.data?.pageSize || 20),
+          total: Number(r.data?.total || 0),
+          totalPages: Number(r.data?.totalPages || 1),
+        });
+      } finally {
+        if (!opts?.silent) setLoading(false);
+      }
+    },
+    [dateFilters.from, dateFilters.to, pageFromUrl, searchParams]
+  );
+
+  const refreshDetail = useCallback(async (id: number) => {
+    try {
+      const tripRes = await api.get(`/admin/trips/${id}`);
+      const trip = tripRes.data;
+      setDetail(trip);
+      mergeTripIntoList(trip);
+    } catch {
+      /* bỏ qua lỗi poll */
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load, filters]);
+
+  useEffect(() => {
+    api.get("/admin/routes").then((r) => setRoutes(r.data));
+    api.get("/admin/drivers").then((r) => setDrivers(r.data));
+  }, []);
+
+  useEffect(() => {
+    const poll = () => {
+      if (document.visibilityState !== "visible") return;
+      void load({ silent: true });
+      if (detailId) void refreshDetail(detailId);
+    };
+    const timer = window.setInterval(poll, 12_000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") poll();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [load, detailId, refreshDetail]);
+
+  const setBookingDriverStatus = async (bookingId: number, isCargo: boolean, status: string) => {
+    if (!detailId || !status) return;
+    setStatusBusyBookingId(bookingId);
+    try {
+      const r = await api.post(`/admin/trips/${detailId}/bookings/${bookingId}/driver-status`, {
+        ...(isCargo ? { driverCargoStatus: status } : { driverRideStatus: status }),
+      });
+      if (r.data?.autoCompleted && r.data?.message) alert(r.data.message);
+      await refreshDetail(detailId);
+      await load({ silent: true });
+    } catch (e: any) {
+      alert(e.response?.data?.message || e.message || "Không cập nhật được");
+    } finally {
+      setStatusBusyBookingId(null);
+    }
+  };
 
   const openDetail = async (id: number) => {
     setDetailId(id);
     setDetail(null);
+    setAssignDriverId("");
     setDetailLoading(true);
     try {
-      const r = await api.get(`/admin/trips/${id}`);
-      setDetail(r.data);
+      const [tripRes, driversRes] = await Promise.all([
+        api.get(`/admin/trips/${id}`),
+        api.get("/admin/drivers"),
+      ]);
+      setDetail(tripRes.data);
+      setAssignDrivers(driversRes.data || []);
     } catch (e: any) {
       alert(e.response?.data?.message || "Không tải được chi tiết chuyến");
       setDetailId(null);
@@ -216,9 +432,25 @@ export function AdminTrips() {
       const r = await api.patch(`/admin/trips/${id}`, { status });
       if (status === "COMPLETED" && r.data?.message) alert(r.data.message);
       await load();
-      if (detailId === id) await openDetail(id);
+      if (detailId === id) await refreshDetail(id);
     } finally {
       setActionBusyId(null);
+    }
+  };
+
+  const assignDriver = async () => {
+    if (!detailId || !assignDriverId) return;
+    const driver = assignDrivers.find((d) => String(d.id) === assignDriverId);
+    const vehicleId = driver?.vehicles?.[0]?.id;
+    setAssigningDriver(true);
+    try {
+      await api.patch(`/admin/trips/${detailId}`, { driverId: Number(assignDriverId), vehicleId });
+      await refreshDetail(detailId);
+      await load({ silent: true });
+    } catch (e: any) {
+      alert(e.response?.data?.message || "Không gán được tài xế");
+    } finally {
+      setAssigningDriver(false);
     }
   };
 
@@ -233,8 +465,8 @@ export function AdminTrips() {
         customerAgreed: true,
       });
       alert(r.data?.message || "Đã chuyển chuyến");
-      await openDetail(detailId);
-      load();
+      await refreshDetail(detailId);
+      await load({ silent: true });
     } catch (e: any) {
       alert(e.response?.data?.message || "Không chuyển được");
     } finally {
@@ -364,11 +596,17 @@ export function AdminTrips() {
             </label>
             <label>
               <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Từ ngày</span>
-              <GregorianDateInput value={draft.from || ""} onChange={(value) => setDraft({ ...draft, from: value })} />
+              <GregorianDateInput
+                value={draft.from || todayLocalDateValue()}
+                onChange={(value) => setDraft({ ...draft, from: value || todayLocalDateValue() })}
+              />
             </label>
             <label>
               <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Đến ngày</span>
-              <GregorianDateInput value={draft.to || ""} onChange={(value) => setDraft({ ...draft, to: value })} />
+              <GregorianDateInput
+                value={draft.to || todayLocalDateValue()}
+                onChange={(value) => setDraft({ ...draft, to: value || todayLocalDateValue() })}
+              />
             </label>
             <label>
               <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Ghế trống ≥</span>
@@ -447,18 +685,24 @@ export function AdminTrips() {
           )}
         </p>
         {loading && <span className="text-xs font-semibold text-brand-700">Đang tải...</span>}
+        {!loading && (
+          <span className="text-xs text-slate-500" title="Cột Khách/đón trả tự cập nhật">
+            Tự làm mới ~12s
+          </span>
+        )}
       </div>
 
       {/* Desktop table */}
       <div className="card hidden overflow-hidden !p-0 md:block">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1020px] text-left text-sm">
+          <table className="w-full min-w-[1160px] text-left text-sm">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/80 text-xs font-bold uppercase tracking-wide text-slate-500">
                 <th className="px-4 py-3">Chuyến</th>
                 <th className="px-4 py-3">Ngày chạy</th>
                 <th className="px-4 py-3">Tuyến</th>
                 <th className="px-4 py-3">Tài xế / xe</th>
+                <th className="px-4 py-3">Khách / đón trả</th>
                 <th className="px-4 py-3">Ghế</th>
                 <th className="px-4 py-3">Doanh thu</th>
                 <th className="px-4 py-3">Công nợ</th>
@@ -473,15 +717,11 @@ export function AdminTrips() {
                     <button type="button" className="group text-left" onClick={() => openDetail(t.id)}>
                       <b className="text-brand-800 group-hover:underline">{t.code}</b>
                     </button>
-                    <p className="mt-0.5 text-xs text-slate-500">{t._count?.tripBookings ?? 0} đơn</p>
+                    <p className="mt-0.5 text-xs text-slate-500">{t._count?.tripBookings ?? t.tripBookings?.length ?? 0} đơn</p>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 font-medium text-ink-800">{fmtDepartureTime(t.departureAt)}</td>
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-ink-900">{t.route?.name || "—"}</p>
-                    <p className="mt-0.5 inline-flex items-center gap-1 text-xs text-slate-500">
-                      <MapPin size={12} className="shrink-0" />
-                      {t.route?.fromName || "—"} → {t.route?.toName || "—"}
-                    </p>
+                  <td className="max-w-[200px] px-4 py-3 align-top">
+                    <RouteCell route={t.route} />
                   </td>
                   <td className="px-4 py-3">
                     <p className="font-medium text-ink-900">{t.driver?.name || "Chưa gán"}</p>
@@ -490,6 +730,9 @@ export function AdminTrips() {
                       {t.vehicle?.licensePlate || "Chưa có biển số"}
                       {t.vehicle?.vehicleType ? ` · ${t.vehicle.vehicleType}` : ""}
                     </p>
+                  </td>
+                  <td className="min-w-[220px] max-w-[300px] px-4 py-3 align-top">
+                    <TripCustomersSummary tripBookings={t.tripBookings} onOpen={() => openDetail(t.id)} />
                   </td>
                   <td className="min-w-[120px] px-4 py-3">
                     <SeatMeter booked={Number(t.bookedSeats || 0)} total={Number(t.totalSeats || 0)} available={Number(t.availableSeats || 0)} />
@@ -522,7 +765,7 @@ export function AdminTrips() {
               ))}
               {!loading && !items.length && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-12 text-center text-slate-500">
+                  <td colSpan={10} className="px-4 py-12 text-center text-slate-500">
                     Không có chuyến phù hợp bộ lọc.{" "}
                     <Link to="/admin/dispatch" className="font-bold text-brand-700">
                       Sang điều phối
@@ -543,7 +786,7 @@ export function AdminTrips() {
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-xs font-bold uppercase tracking-wide text-brand-700">{t.code}</p>
-                <p className="mt-1 text-sm font-semibold text-ink-900">{t.route?.name || "—"}</p>
+                <p className="mt-1 text-sm font-semibold text-ink-900">{routePrimaryLabel(t.route)}</p>
                 <p className="mt-0.5 text-xs text-slate-500">{fmtDepartureTime(t.departureAt)}</p>
               </div>
               <span className={`badge shrink-0 ${tripStatusBadgeClass(t.status)}`}>{tripStatus(t.status)}</span>
@@ -555,6 +798,9 @@ export function AdminTrips() {
               {t.driver?.name || "Chưa gán tài xế"}
               {t.vehicle?.licensePlate ? ` · ${t.vehicle.licensePlate}` : ""}
             </p>
+            <div className="mt-2">
+              <TripCustomersSummary tripBookings={t.tripBookings} onOpen={() => openDetail(t.id)} />
+            </div>
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
               <p className="text-lg font-extrabold text-cta">{formatMoney(t.totalCustomerAmount)}</p>
               <p className="text-xs text-slate-500">Nợ {formatMoney(t.driverDebtAmount)}</p>
@@ -637,7 +883,7 @@ export function AdminTrips() {
                     </div>
                     <div>
                       <p className="text-xs font-bold uppercase text-slate-500">Tuyến</p>
-                      <p className="mt-1 font-semibold text-ink-900">{detail.route?.name || "—"}</p>
+                      <RouteCell route={detail.route} className="mt-1" />
                     </div>
                     <div>
                       <p className="text-xs font-bold uppercase text-slate-500">Tài xế</p>
@@ -660,7 +906,48 @@ export function AdminTrips() {
                         Tài xế từ chối: <b>{detail.driverRejectReason}</b>
                       </p>
                     )}
+                    {!detail.driverId && ["COLLECTING", "READY"].includes(detail.status) && (
+                      <div className="sm:col-span-2 rounded-xl border border-amber-200 bg-amber-50/80 p-3">
+                        <p className="text-xs font-bold uppercase text-amber-900">Gán tài xế</p>
+                        <div className="mt-2 flex flex-wrap items-end gap-2">
+                          <select
+                            className="input min-w-[200px] flex-1"
+                            value={assignDriverId}
+                            onChange={(e) => setAssignDriverId(e.target.value)}
+                          >
+                            <option value="">Chọn tài xế rảnh</option>
+                            {assignDrivers.map((d) => (
+                              <option key={d.id} value={d.id}>
+                                {d.name}
+                                {d.vehicles?.[0]?.licensePlate ? ` · ${d.vehicles[0].licensePlate}` : ""}
+                                {d.vehicles?.[0]?.seats ? ` · ${d.vehicles[0].seats} chỗ` : ""}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            className="btn-primary py-2"
+                            disabled={assigningDriver || !assignDriverId}
+                            onClick={assignDriver}
+                          >
+                            Gán
+                          </button>
+                          <Link to="/admin/dispatch" className="text-sm font-semibold text-brand-700 underline">
+                            Sang điều phối
+                          </Link>
+                        </div>
+                      </div>
+                    )}
                   </div>
+
+                  {detail.tripBookings?.length > 0 && (
+                    <p className="rounded-xl border border-brand-200 bg-brand-50/60 px-3 py-2 text-sm font-semibold text-brand-900">
+                      Tiến độ đón/trả: {tripProgressLabel(summarizeTripBookings(detail.tripBookings))}
+                      <span className="mt-1 block text-xs font-normal text-slate-600">
+                        Tự làm mới ~12 giây khi tài xế đổi; admin có thể sửa trạng thái từng vé bên dưới.
+                      </span>
+                    </p>
+                  )}
 
                   <div>
                     <div className="flex items-center justify-between gap-3">
@@ -668,16 +955,48 @@ export function AdminTrips() {
                       <span className="badge badge-info">{detail.tripBookings?.length || 0} đơn</span>
                     </div>
                     <div className="mt-3 grid gap-2">
-                      {(detail.tripBookings || []).map((tb: any) => (
+                      {(detail.tripBookings || []).map((tb: any) => {
+                        const isCargo = tb.booking?.type === "CARGO";
+                        const rideSt = isCargo ? tb.booking?.driverCargoStatus : tb.booking?.driverRideStatus;
+                        const rideLabel = isCargo
+                          ? driverCargoStatus(tb.booking?.driverCargoStatus)
+                          : driverRideStatus(tb.booking?.driverRideStatus);
+                        return (
                         <div key={tb.id} className="rounded-2xl border border-slate-200 bg-white p-3 transition hover:border-brand-200 hover:bg-brand-50/30">
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div className="min-w-0">
-                              <Link to={`/admin/don-hang/${tb.booking?.id}`} className="font-bold text-brand-800 hover:underline">
-                                {tb.booking?.code}
-                              </Link>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Link to={`/admin/don-hang/${tb.booking?.id}`} className="font-bold text-brand-800 hover:underline">
+                                  {tb.booking?.code}
+                                </Link>
+                                <span className={`badge text-[10px] ${rideStatusBadgeClass(rideSt, isCargo)}`}>
+                                  {rideLabel}
+                                </span>
+                                {tb.seatCount > 1 && (
+                                  <span className="text-[10px] font-semibold text-slate-500">{tb.seatCount} ghế</span>
+                                )}
+                              </div>
+                              <label className="mt-2 block text-xs font-semibold text-slate-600">
+                                Trạng thái đón/trả (admin)
+                                <select
+                                  className="input mt-1 w-full max-w-xs py-1 text-xs"
+                                  value={rideSt || ""}
+                                  disabled={statusBusyBookingId === tb.booking?.id}
+                                  onChange={(e) => void setBookingDriverStatus(tb.booking.id, isCargo, e.target.value)}
+                                >
+                                  <option value="">— Chưa có —</option>
+                                  {Object.entries(isCargo ? DRIVER_CARGO_STATUS_VI : DRIVER_RIDE_STATUS_VI).map(
+                                    ([k, label]) => (
+                                      <option key={k} value={k}>
+                                        {label}
+                                      </option>
+                                    )
+                                  )}
+                                </select>
+                              </label>
                               <p className="mt-0.5 font-medium text-ink-900">{tb.booking?.customerName}</p>
                               <p className="text-xs text-slate-500">
-                                {tb.booking?.customerPhone} · {tb.booking?.route?.name || "—"}
+                                {tb.booking?.customerPhone} · {routePrimaryLabel(tb.booking?.route)}
                               </p>
                               <p className="mt-1 text-sm text-slate-600">
                                 {tb.booking?.pickupAddress || "—"} → {tb.booking?.dropoffAddress || "—"}
@@ -697,7 +1016,8 @@ export function AdminTrips() {
                             </div>
                           </div>
                         </div>
-                      ))}
+                      );
+                      })}
                       <div className="mt-1 flex flex-wrap items-end gap-2 rounded-xl bg-slate-50 p-3">
                         <label className="text-sm font-semibold">
                           ID chuyến đích
