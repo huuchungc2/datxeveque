@@ -55,6 +55,7 @@ const defaultPages = () => ({
   tripsPage: 1,
   driversPage: 1,
   suggestionsPage: 1,
+  dispatchedPage: 1,
 });
 
 function driversEligibleForTrip(trip: any, drivers: any[], contextBooking?: any) {
@@ -955,6 +956,71 @@ export function AdminDispatch() {
           </section>
         </div>
       )}
+
+      <section className="card mt-8 min-w-0 !p-0 overflow-hidden">
+        <div className="border-b bg-slate-50 px-3 py-3 sm:px-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <h2 className="text-base font-bold leading-snug break-words sm:text-lg">
+                ④ Đã điều phối ({data?.dispatchedMeta?.total ?? data?.dispatchedBookings?.length ?? 0}) · {dateRangeLabel}
+              </h2>
+              <p className="mt-1 text-xs text-slate-600">
+                Đơn đã gán ít nhất một phần lên chuyến trong khoảng ngày lọc. Xem chi tiết chuyến tại{" "}
+                <Link to="/admin/dieu-phoi" className="font-semibold text-brand-700 underline">
+                  Danh sách chuyến xe
+                </Link>
+                .
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="max-h-[50vh] space-y-2 overflow-y-auto p-3">
+          {(data?.dispatchedBookings || []).map((b: any) => {
+            const tripLines = (b.tripBookings || [])
+              .map((tb: any) => {
+                const trip = tb.trip;
+                if (!trip?.code) return null;
+                const seats = Number(tb.seatCount || 0);
+                const driver = trip.driver?.name || "Chưa gán tài xế";
+                return `${trip.code} (${seats} ghế · ${driver})`;
+              })
+              .filter(Boolean);
+            return (
+              <div key={b.id} className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <b>{b.code}</b>
+                  <span className="badge badge-success">{bookingStatus(b.status)}</span>
+                </div>
+                <p className={`mt-1 text-sm ${b.scheduledAt ? "text-slate-600" : "text-slate-500"}`}>
+                  {fmtTime(b.scheduledAt)} | <b>{routePrimaryLabel(b.route, b.direction || "Chưa chọn tuyến")}</b>
+                </p>
+                <p className="mt-1 text-sm text-slate-700">
+                  {bookingCapacityLabel(b)}
+                  {b.dispatchSeatRemaining != null && Number(b.dispatchSeatRemaining) > 0 && (
+                    <span className="text-amber-800"> · còn {b.dispatchSeatRemaining} ghế chưa gán</span>
+                  )}
+                </p>
+                <p className="mt-1 text-xs text-slate-600">
+                  Chuyến: {tripLines.length ? tripLines.join(" · ") : "—"}
+                </p>
+                <p className="text-xs text-slate-500">
+                  {b.customerName} • {b.customerPhone}
+                </p>
+              </div>
+            );
+          })}
+          {!data?.dispatchedBookings?.length && (
+            <p className="p-4 text-sm text-slate-500">
+              Chưa có đơn nào được gán chuyến có giờ đi {dateRangeLabel}. Gán ở 3 cột trên hoặc xác nhận gợi ý.
+            </p>
+          )}
+        </div>
+        <ColumnPager
+          meta={data?.dispatchedMeta}
+          disabled={loading || busy}
+          onPage={(p) => setColumnPage("dispatchedPage", p)}
+        />
+      </section>
 
       <section className="mt-8 min-w-0">
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">

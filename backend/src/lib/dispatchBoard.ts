@@ -52,6 +52,9 @@ export function buildDispatchWheres(query: DispatchBoardQuery) {
   const whereBooking: Record<string, unknown> = {
     status: { in: DISPATCH_UNASSIGNED_STATUSES },
   };
+  const whereDispatchedBooking: Record<string, unknown> = {
+    tripBookings: { some: {} },
+  };
   const whereTrip: Record<string, unknown> = {
     status: { in: [TripStatus.COLLECTING, TripStatus.READY] },
     availableSeats: { gt: 0 },
@@ -61,6 +64,7 @@ export function buildDispatchWheres(query: DispatchBoardQuery) {
   if (query.routeId) {
     const routeId = Number(query.routeId);
     whereBooking.routeId = routeId;
+    whereDispatchedBooking.routeId = routeId;
     whereTrip.routeId = routeId;
   }
   if (query.matchRouteId) {
@@ -73,25 +77,32 @@ export function buildDispatchWheres(query: DispatchBoardQuery) {
   if (matchRun === "SG_TO_PROVINCE" || matchRun === "PROVINCE_TO_SG") {
     whereDriverExtra.runDirection = matchRun;
   }
-  if (query.type) whereBooking.type = query.type;
+  if (query.type) {
+    whereBooking.type = query.type;
+    whereDispatchedBooking.type = query.type;
+  }
 
   const keyword = String(query.q || query.keyword || "").trim();
   if (keyword) {
-    whereBooking.OR = [
+    const keywordOr = [
       { customerName: { contains: keyword } },
       { customerPhone: { contains: keyword } },
       { code: { contains: keyword } },
     ];
+    whereBooking.OR = keywordOr;
+    whereDispatchedBooking.OR = keywordOr;
   }
 
   const dispatchDateRange = parseScheduledAtDateRange(query.from, query.to);
   if (dispatchDateRange) {
     whereBooking.scheduledAt = dispatchDateRange;
+    whereDispatchedBooking.scheduledAt = dispatchDateRange;
     whereTrip.departureAt = dispatchDateRange;
   }
 
   if (query.direction) {
     whereBooking.direction = { contains: String(query.direction) };
+    whereDispatchedBooking.direction = { contains: String(query.direction) };
     whereDriverExtra.direction = { contains: String(query.direction) };
   }
 
@@ -102,7 +113,7 @@ export function buildDispatchWheres(query: DispatchBoardQuery) {
     }
   }
 
-  return { whereBooking, whereTrip, whereDriverExtra };
+  return { whereBooking, whereDispatchedBooking, whereTrip, whereDriverExtra };
 }
 
 async function fetchUnassignedBookings(whereBooking: Record<string, unknown>) {
@@ -116,7 +127,7 @@ async function fetchUnassignedBookings(whereBooking: Record<string, unknown>) {
 }
 
 export async function loadDispatchBoard(query: DispatchBoardQuery) {
-  const { whereBooking, whereTrip, whereDriverExtra } = buildDispatchWheres(query);
+  const { whereBooking, whereDispatchedBooking, whereTrip, whereDriverExtra } = buildDispatchWheres(query);
   const busyDriverIds = await getBusyDriverIds();
   const whereDriver = buildAvailableDriverWhere(busyDriverIds, whereDriverExtra);
 
@@ -128,12 +139,19 @@ export async function loadDispatchBoard(query: DispatchBoardQuery) {
   const driversPageSize = parseDispatchPageSize(query, "driversPageSize", 8, 50);
   const suggestionsPage = parseDispatchPage(query, "suggestionsPage");
   const suggestionsPageSize = parseDispatchPageSize(query, "suggestionsPageSize", 8, 30);
+  const dispatchedPage = parseDispatchPage(query, "dispatchedPage");
+  const dispatchedPageSize = parseDispatchPageSize(query, "dispatchedPageSize", 10, 50);
 
   const tripInclude = {
     route: true,
     driver: true,
     vehicle: true,
     tripBookings: { include: { booking: { include: { route: true } } } },
+  } as const;
+
+  const dispatchedInclude = {
+    route: true,
+    tripBookings: { include: { trip: { include: { driver: true, route: true } } } },
   } as const;
 
   const [
@@ -145,6 +163,8 @@ export async function loadDispatchBoard(query: DispatchBoardQuery) {
     availableDriversPage,
     driversForSuggestions,
     routes,
+    dispatchedTotal,
+    dispatchedRows,
   ] = await Promise.all([
     fetchUnassignedBookings(whereBooking),
     prisma.trip.count({ where: whereTrip }),
@@ -176,10 +196,19 @@ export async function loadDispatchBoard(query: DispatchBoardQuery) {
       take: 200,
     }),
     prisma.route.findMany({ where: publicRouteWhere(), orderBy: { id: "asc" } }),
+    prisma.booking.count({ where: whereDispatchedBooking }),
+    prisma.booking.findMany({
+      where: whereDispatchedBooking,
+      include: dispatchedInclude,
+      orderBy: [{ updatedAt: "desc" }, { scheduledAt: "desc" }],
+      skip: (dispatchedPage - 1) * dispatchedPageSize,
+      take: dispatchedPageSize,
+    }),
   ]);
 
   const bookingsPaged = paginateSlice(allUnassigned, bookingsPage, bookingsPageSize);
   const unassignedBookings = serializeBookings(bookingsPaged.items).map((b) => enrichBookingDispatchSeats(b));
+  const dispatchedBookings = serializeBookings(dispatchedRows).map((b) => enrichBookingDispatchSeats(b));
 
   const allSuggestions = buildDispatchSuggestions(allUnassigned, tripsForSuggestions, driversForSuggestions);
   const suggestionsWithOptions = allSuggestions.map((s) => ({
@@ -226,6 +255,13 @@ export async function loadDispatchBoard(query: DispatchBoardQuery) {
       totalPages: suggestionsPaged.totalPages,
     },
     seatSummary,
+    dispatchedBookings,
+    dispatchedMeta: {
+      page: dispatchedPage,
+      pageSize: dispatchedPageSize,
+      total: dispatchedTotal,
+      totalPages: Math.max(1, Math.ceil(dispatchedTotal / dispatchedPageSize)),
+    },
     assignDriverCandidates: driversForSuggestions.map((d) => ({
       id: d.id,
       name: d.name,

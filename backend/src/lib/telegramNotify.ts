@@ -60,7 +60,10 @@ export async function mirrorInAppNotification(payload: {
   body: string;
   link?: string | null;
 }) {
-  if (!telegramNotifyEnabled()) return;
+  if (!telegramNotifyEnabled()) {
+    console.warn("[telegram] Bỏ qua mirror — thiếu TELEGRAM_BOT_TOKEN hoặc TELEGRAM_CHAT_ID trong process env");
+    return;
+  }
   const lines = [`🔔 ${payload.title}`, payload.body];
   const url = appAbsoluteLink(payload.link);
   if (url) lines.push(`👉 ${url}`);

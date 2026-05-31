@@ -766,9 +766,9 @@ export function AdminTrips() {
               {!loading && !items.length && (
                 <tr>
                   <td colSpan={10} className="px-4 py-12 text-center text-slate-500">
-                    Không có chuyến phù hợp bộ lọc.{" "}
+                    Không có chuyến phù hợp bộ lọc (mặc định: hôm nay). Thử mở rộng <b>Từ ngày — Đến ngày</b>, hoặc{" "}
                     <Link to="/admin/dispatch" className="font-bold text-brand-700">
-                      Sang điều phối
+                      sang điều phối
                     </Link>{" "}
                     để tạo chuyến mới.
                   </td>

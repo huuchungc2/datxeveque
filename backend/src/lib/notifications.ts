@@ -46,10 +46,12 @@ async function createForUsers(
   }
 ) {
   const ids = [...new Set(userIds.filter(Boolean))];
-  if (!ids.length) return;
-  await prisma.notification.createMany({
-    data: ids.map((userId) => ({ userId, ...data })),
-  });
+  if (ids.length) {
+    await prisma.notification.createMany({
+      data: ids.map((userId) => ({ userId, ...data })),
+    });
+  }
+  // Nhóm Telegram luôn nhận tin khi đã cấu hình bot — không phụ thuộc có user staff trong DB.
   await mirrorInAppNotification({
     title: data.title,
     body: data.body,

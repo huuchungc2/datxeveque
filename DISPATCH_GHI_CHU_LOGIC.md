@@ -184,4 +184,51 @@ Tài xế rảnh: `dispatchDrivers.ts` — `Rảnh`, có xe, không trip `COLLEC
 
 ---
 
-*Cập nhật: 2026-05-29 — tài xế điều phối theo **chiều chạy** (mọi tuyến); đơn/chuyến vẫn theo `routeId`. Gán ghế từng phần, `trip_bookings.seat_count`.*
+## 12. Đặt trước + gán tài xế — ghi chú nghiệp vụ (TODO triển khai)
+
+**Hiện trạng (2026-05-31, đã fix một phần UI/API):**
+
+| Đã xong | Nội dung |
+|---------|----------|
+| ✓ | `GET /admin/trips` lọc ngày bằng `parseScheduledAtDateRange` (hết lỗi chỉ thấy chuyến 00:00) |
+| ✓ | `/admin/dispatch` mục **④ Đã điều phối** (`dispatchedBookings`) |
+| ✓ | Tạo chuyến mới: `departureAt` = `scheduledAt` đơn (không phải ngày admin bấm gán) |
+
+**Vấn đề nghiệp vụ còn lại:**
+
+- Gán **tài xế** cho chuyến `COLLECTING/READY` → tài xế **bận ngay** (`getBusyDriverIds`, `driverProfileFromTrip`), **không** xét `departureAt` còn xa.
+- Dispatch mặc định lọc **hôm nay** → đơn/chuyến ngày sau dễ “mất” nếu admin không mở ngày.
+
+**Quy trình vận hành tạm (trước khi sửa code):**
+
+1. Khách đặt trước → đơn chờ (`NEW` / `WAITING_DISPATCH`).
+2. **Sớm:** admin gom đơn → **tạo chuyến chưa tài xế** (`COLLECTING`, `driverId = null`).
+3. **Gần ngày đi (T-1 hoặc sáng ngày đi):** mới **gán tài xế** + chờ tài xế **Đồng ý**.
+4. Màn dispatch: mở lọc **Từ hôm nay → +7 ngày** khi xử lý đơn đặt trước.
+
+**Triển khai code đề xuất (PR tiếp theo):**
+
+### PR1 — Nhẹ (ưu tiên)
+
+- Dispatch + Chuyến xe: mặc định `to = hôm nay + 7 ngày` (giữ `from = hôm nay`).
+- Khi gán tài xế mà `departureAt` > now + `DISPATCH_DRIVER_LOCK_HOURS` (setting, mặc định **24h**):
+  - Popup cảnh báo: gán sớm sẽ khóa tài xế.
+  - Nút **Chỉ gom khách** / **Gán tài xế luôn**.
+- Badge chuyến: **Chưa chốt tài xế · đi {ngày}** vs **Đã chốt tài xế**.
+
+### PR2 — Tách pre-assign vs lock (gốc)
+
+- Field `driverLockedAt` (nullable) trên `trips`, hoặc enum chế độ trên chuyến.
+- **`getBusyDriverIds` / `assertDriverAvailableForNewTrip`:** chỉ coi tài xế busy khi:
+  - chuyến `IN_PROGRESS`, hoặc
+  - `READY`, hoặc
+  - `COLLECTING` + đã có `driverId` + (`driverLockedAt` set **hoặc** `departureAt` trong cửa sổ 24h).
+- **`assignDriverToTrip`:** mặc định pre-assign (có `driverId`, **chưa** lock) nếu còn xa ngày đi; admin bấm **Chốt chuyến** → set `driverLockedAt`, lúc đó mới `driverProfileFromTrip` → `Đang chạy chuyến`.
+- Ràng buộc: **một tài xế không hai chuyến cùng ngày + cùng chiều** (kể pre-assign).
+- (Tuỳ chọn) Cron / job: T-24h tự set `driverLockedAt` cho chuyến đã có tài xế.
+
+**File sửa dự kiến:** `dispatchDrivers.ts`, `dispatchApply.ts`, `driverAvailability.ts`, `AdminDispatch.tsx`, `schema.prisma` + migration, `settings` env.
+
+---
+
+*Cập nhật: 2026-05-31 — thêm §12 đặt trước; §11 trước 2026-05-29 chi tiết gán ghế từng phần.*

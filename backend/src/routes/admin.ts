@@ -438,17 +438,10 @@ async function loadDispatchContext(query: Record<string, unknown>) {
       { code: { contains: keyword } },
     ];
   }
-  const dateFrom = query.dateFrom || query.from;
-  const dateTo = query.dateTo || query.to;
-  if (dateFrom || dateTo) {
-    whereBooking.scheduledAt = {
-      gte: dateFrom ? new Date(String(dateFrom)) : undefined,
-      lte: dateTo ? new Date(String(dateTo)) : undefined,
-    };
-    whereTrip.departureAt = {
-      gte: dateFrom ? new Date(String(dateFrom)) : undefined,
-      lte: dateTo ? new Date(String(dateTo)) : undefined,
-    };
+  const dispatchDateRange = parseScheduledAtDateRange(query.dateFrom || query.from, query.dateTo || query.to);
+  if (dispatchDateRange) {
+    whereBooking.scheduledAt = dispatchDateRange;
+    whereTrip.departureAt = dispatchDateRange;
   }
   if (query.direction) {
     whereBooking.direction = { contains: String(query.direction) };
@@ -639,12 +632,8 @@ adminRouter.get("/trips", async (req, res) => {
   const debtMin = toNumberOrUndefined(req.query.debtMin);
   if (debtMin !== undefined) where.driverDebtAmount = { gte: debtMin };
 
-  if (req.query.from || req.query.to) {
-    where.departureAt = {
-      gte: req.query.from ? new Date(String(req.query.from)) : undefined,
-      lte: req.query.to ? new Date(String(req.query.to)) : undefined,
-    };
-  }
+  const departureRange = parseScheduledAtDateRange(req.query.from, req.query.to);
+  if (departureRange) where.departureAt = departureRange;
 
   const keyword = String(req.query.keyword || "").trim();
   if (keyword) {

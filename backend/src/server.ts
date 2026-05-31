@@ -13,6 +13,7 @@ import { setupRouter } from "./routes/setup.js";
 import { prisma } from "./lib/prisma.js";
 import { publicRouteWhere } from "./lib/routes.js";
 import { bootstrapAuthOnStartup } from "./lib/bootstrapAuth.js";
+import { telegramNotifyEnabled } from "./lib/telegramNotify.js";
 import { apiResponseMiddleware } from "./middleware/apiResponse.js";
 
 const app = express();
@@ -77,6 +78,7 @@ app.get("/api/health", async (_req, res) => {
         adminReady: adminCount > 0,
         routeCount,
         userCount,
+        telegramConfigured: telegramNotifyEnabled(),
       },
     });
   } catch (e: unknown) {
@@ -113,5 +115,10 @@ app.get("/sitemap.xml", async (_req, res) => {
 
 app.listen(port, host, () => {
   console.log(`Đặt Xe Về Quê API đang chạy tại http://localhost:${port} (LAN: port ${port}, host ${host})`);
+  console.log(
+    telegramNotifyEnabled()
+      ? "[telegram] Đã cấu hình — mirror thông báo chuông sang nhóm"
+      : "[telegram] Chưa cấu hình TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID"
+  );
   void bootstrapAuthOnStartup();
 });
