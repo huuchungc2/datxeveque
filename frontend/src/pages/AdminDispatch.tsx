@@ -3,7 +3,13 @@ import { Link, useSearchParams } from "react-router-dom";
 import { Filter } from "lucide-react";
 import { api, formatMoney } from "../lib/api";
 import { ColumnPager } from "../components/dispatch/ColumnPager";
-import { fmtDepartureTime, formatDisplayDate, todayLocalDateValue } from "../lib/datetime";
+import {
+  addLocalDateDays,
+  defaultAdminListDateRange,
+  fmtDepartureTime,
+  formatDisplayDate,
+  todayLocalDateValue,
+} from "../lib/datetime";
 import { ensureAppTime } from "../lib/appTime";
 import { SERVICE_TYPE_OPTIONS, serviceTypeLabel } from "../lib/serviceTypes";
 import {
@@ -122,16 +128,16 @@ export function AdminDispatch() {
   const [assignDriverPick, setAssignDriverPick] = useState<Record<number, string>>({});
   const [filtersOpen, setFiltersOpen] = useState(false);
 
-  /** Mặc định: đơn/chuyến trong ngày hôm nay (theo giờ server VN) */
+  /** Mặc định: hôm nay → +7 ngày (đơn/chuyến đặt trước). */
   useEffect(() => {
     const from = searchParams.get("from");
     const to = searchParams.get("to");
     if (from && to) return;
     void ensureAppTime().then(() => {
-      const today = todayLocalDateValue();
+      const { from: defFrom, to: defTo } = defaultAdminListDateRange();
       const next = new URLSearchParams(searchParams);
-      if (!from) next.set("from", today);
-      if (!to) next.set("to", from || today);
+      if (!from) next.set("from", defFrom);
+      if (!to) next.set("to", defTo);
       setSearchParams(next, { replace: true });
     });
   }, [searchParams, setSearchParams]);
@@ -188,11 +194,20 @@ export function AdminDispatch() {
     setPages(defaultPages());
   };
 
+  const setDateRange = (from: string, to: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("from", from);
+    next.set("to", to);
+    setSearchParams(next);
+    setFilterDraft((prev) => ({ ...prev, from, to }));
+    setPages(defaultPages());
+  };
+
   const clearFilters = () => {
-    const today = todayLocalDateValue();
-    setFilterDraft({ from: today, to: today });
+    const { from, to } = defaultAdminListDateRange();
+    setFilterDraft({ from, to });
     setFilters({});
-    setSearchParams({ from: today, to: today });
+    setSearchParams({ from, to });
     setPages(defaultPages());
   };
 
@@ -524,6 +539,14 @@ export function AdminDispatch() {
     selectedId && selectedBooking?.routeId
       ? (data?.collectingTrips?.length || 0) - tripsForManual.length
       : 0;
+
+  /** Chưa chọn đơn: xem mọi chuyến đang gom trong khoảng ngày; đã chọn: lọc cùng tuyến để gán. */
+  const tripsColumnList = useMemo(() => {
+    if (selectedId && selectedBooking?.routeId) {
+      return tripsForManual.map((t: any) => ({ t, browseOnly: false }));
+    }
+    return (data?.collectingTrips || []).map((t: any) => ({ t, browseOnly: true }));
+  }, [selectedId, selectedBooking, tripsForManual, data?.collectingTrips]);
   const manualDriverHidden =
     selectedId && selectedBooking?.routeId
       ? (data?.assignDriverCandidates?.length || data?.availableDrivers?.length || 0) - driversForManual.length
@@ -537,13 +560,47 @@ export function AdminDispatch() {
         <div className="min-w-0">
           <h1 className="section-title">Điều phối chuyến</h1>
           <p className="mt-2 max-w-3xl text-sm text-slate-600 sm:text-base">
-            Đơn và chuyến có giờ đi {dateRangeLabel}. Chọn <b>một đơn</b> cột ① → cột ② theo <b>tuyến đơn</b>, cột ③
-            tài xế theo <b>chiều chạy</b> (mọi tuyến cùng chiều). Gán ghế từng phần nếu đơn nhiều chỗ.
+            Đơn và chuyến có giờ đi {dateRangeLabel} (mặc định 7 ngày tới). Chọn <b>một đơn</b> cột ① → cột ② lọc
+            theo <b>tuyến đơn</b>, cột ③ tài xế theo <b>chiều chạy</b>. Gán ghế từng phần nếu đơn nhiều chỗ.
           </p>
         </div>
         <Link to="/admin/dieu-phoi" className="btn-secondary w-full shrink-0 py-2.5 text-center text-sm sm:w-auto">
           Danh sách chuyến xe
         </Link>
+      </div>
+
+      <div className="card mt-4 flex flex-col gap-2 border-brand-200 bg-blue-50/60 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <p className="text-sm text-brand-900">
+          <b>Lọc đang dùng:</b> {formatDisplayDate(dateFilters.from)} → {formatDisplayDate(dateFilters.to)}
+          {data?.bookingsMeta != null && (
+            <span className="text-slate-600">
+              {" "}
+              · {data.bookingsMeta.total} đơn chờ · {data.tripsMeta?.total ?? 0} chuyến gom ·{" "}
+              {data.dispatchedMeta?.total ?? 0} đã điều phối
+            </span>
+          )}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {dateFilters.from === dateFilters.to && (
+            <button
+              type="button"
+              className="btn-primary py-1.5 text-xs"
+              onClick={() => setDateRange(dateFilters.from, addLocalDateDays(dateFilters.from, 7))}
+            >
+              Mở thêm 7 ngày
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn-secondary py-1.5 text-xs"
+            onClick={() => {
+              const today = todayLocalDateValue();
+              setDateRange(addLocalDateDays(today, -7), addLocalDateDays(today, 30));
+            }}
+          >
+            −7 → +30 ngày
+          </button>
+        </div>
       </div>
 
       {data?.seatSummary && (
@@ -789,12 +846,15 @@ export function AdminDispatch() {
                     · {routePrimaryLabel(selectedBooking.route, `tuyến #${selectedBooking.routeId}`)} ({tripsForManual.length} phù hợp)
                   </span>
                 ) : (
-                  <span className="ml-1 text-sm font-normal text-slate-500">· chọn đơn cột ①</span>
+                  <span className="ml-1 text-sm font-normal text-slate-500">
+                    · {data?.tripsMeta?.total ?? tripsColumnList.length} chuyến (chọn đơn ① để gán khách)
+                  </span>
                 )}
               </h2>
               <p className="mt-1 text-xs text-slate-600">
-                Chỉ chuyến <b>cùng tuyến</b>, <b>còn ghế trống</b>. Không hiện chuyến đã đủ khách. Gom thêm vào chuyến
-                đang trống chỗ hoặc tạo chuyến mới (③ tài xế rảnh).
+                {selectedId && selectedBooking?.routeId
+                  ? "Chỉ chuyến cùng tuyến, còn ghế — bấm gán đơn hoặc gán tài xế."
+                  : "Xem mọi chuyến đang gom trong khoảng ngày — chọn đơn cột ① để lọc gán khách."}
               </p>
               {manualTripHidden > 0 && (
                 <p className="text-xs text-slate-500">Đã ẩn {manualTripHidden} chuyến hết ghế hoặc sai chiều.</p>
@@ -804,7 +864,7 @@ export function AdminDispatch() {
               )}
             </div>
             <div className="max-h-[70vh] space-y-2 overflow-y-auto p-3">
-              {tripsForManual.map((t: any) => {
+              {tripsColumnList.map(({ t, browseOnly }: { t: any; browseOnly: boolean }) => {
                 const eligibleDrivers = driversEligibleForTrip(t, assignCandidates, selectedBooking);
                 return (
                 <div
@@ -865,27 +925,38 @@ export function AdminDispatch() {
                   )}
                   <button
                     className="btn-primary mt-3 w-full py-2"
-                    disabled={busy || !selectedId}
+                    disabled={busy || browseOnly || !selectedId}
                     onClick={() => assignToTrip(t.id)}
                   >
-                    {(() => {
-                      const { total } = computeAssignSeatCounts(selectedBookings, Number(t.availableSeats || 0));
-                      const partial = total > 0 && total < selectedSeatsNeeded;
-                      return partial
-                        ? `Gán ${total}/${selectedSeatsNeeded} ghế vào chuyến`
-                        : `Gán đơn vào chuyến (${selectedSeatsNeeded} ghế)`;
-                    })()}
+                    {browseOnly ? (
+                      "Chọn đơn cột ① để gán khách"
+                    ) : (
+                      (() => {
+                        const { total } = computeAssignSeatCounts(selectedBookings, Number(t.availableSeats || 0));
+                        const partial = total > 0 && total < selectedSeatsNeeded;
+                        return partial
+                          ? `Gán ${total}/${selectedSeatsNeeded} ghế vào chuyến`
+                          : `Gán đơn vào chuyến (${selectedSeatsNeeded} ghế)`;
+                      })()
+                    )}
                   </button>
                 </div>
               );
               })}
-              {!tripsForManual.length && (
+              {!tripsColumnList.length && (
                 <p className="p-4 text-sm text-slate-500">
-                  {!selectedId
-                    ? "Chọn một đơn ở cột ① để xem chuyến cùng tuyến."
-                    : !selectedBooking?.routeId
-                      ? "Đơn chưa có tuyến — sửa đơn hoặc chọn đơn khác."
-                      : `Không có chuyến còn chỗ khởi hành ${dateRangeLabel} — tạo chuyến mới với tài xế rảnh (③).`}
+                  Không có chuyến đang gom có ghế trống {dateRangeLabel}.{" "}
+                  <button
+                    type="button"
+                    className="font-semibold text-brand-700 underline"
+                    onClick={() => {
+                      const today = todayLocalDateValue();
+                      setDateRange(addLocalDateDays(today, -7), addLocalDateDays(today, 30));
+                    }}
+                  >
+                    Mở rộng −7 → +30 ngày
+                  </button>{" "}
+                  hoặc tạo chuyến mới (nút trên / cột ③).
                 </p>
               )}
             </div>

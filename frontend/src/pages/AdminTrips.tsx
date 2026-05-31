@@ -5,7 +5,7 @@ import { RouteCell } from "../components/ui/RouteCell";
 import { routePrimaryLabel } from "../lib/routeDisplay";
 import { api, formatMoney } from "../lib/api";
 import { ensureAppTime } from "../lib/appTime";
-import { fmtDepartureTime, todayLocalDateValue } from "../lib/datetime";
+import { fmtDepartureTime, defaultAdminListDateRange, addLocalDateDays, formatDisplayDate, todayLocalDateValue } from "../lib/datetime";
 import { PageTitle, StatCard, dashboardIcons } from "../components/ui/AdminCharts";
 import { GregorianDateInput } from "../components/ui/GregorianDateInputs";
 import { getVisiblePageNumbers } from "../lib/paginationUi";
@@ -76,8 +76,8 @@ const defaultFilters = (): Filters => ({
 });
 
 const defaultDraft = (): FilterDraft => {
-  const today = todayLocalDateValue();
-  return { ...defaultFilters(), from: today, to: today };
+  const { from, to } = defaultAdminListDateRange({ pastDays: 7, forwardDays: 7 });
+  return { ...defaultFilters(), from, to };
 };
 
 function tripStatusBadgeClass(status: string) {
@@ -196,26 +196,29 @@ export function AdminTrips() {
   const [filters, setFilters] = useState<Filters>(defaultFilters);
   const [draft, setDraft] = useState<FilterDraft>(defaultDraft);
 
-  /** Mặc định: chuyến trong ngày hôm nay (theo giờ server VN) */
+  /** Mặc định: 7 ngày qua → 7 ngày tới (chuyến gần đây + đặt trước). */
   useEffect(() => {
     const from = searchParams.get("from");
     const to = searchParams.get("to");
     if (from && to) return;
     void ensureAppTime().then(() => {
-      const today = todayLocalDateValue();
+      const { from: defFrom, to: defTo } = defaultAdminListDateRange({ pastDays: 7, forwardDays: 7 });
       const next = new URLSearchParams(searchParams);
-      if (!from) next.set("from", today);
-      if (!to) next.set("to", from || today);
+      if (!from) next.set("from", defFrom);
+      if (!to) next.set("to", defTo);
       if (!searchParams.get("page")) next.set("page", "1");
       setSearchParams(next, { replace: true });
     });
   }, [searchParams, setSearchParams]);
 
   const dateFilters = useMemo(() => {
+    const from = searchParams.get("from");
+    const to = searchParams.get("to");
+    if (!from && !to) return null;
     const today = todayLocalDateValue();
-    const from = searchParams.get("from") || today;
-    const to = searchParams.get("to") || from;
-    return { from, to };
+    const fromVal = from || today;
+    const toVal = to || fromVal;
+    return { from: fromVal, to: toVal };
   }, [searchParams]);
 
   const pageFromUrl = Number(searchParams.get("page") || 1);
@@ -224,8 +227,7 @@ export function AdminTrips() {
     setDraft((prev) => ({
       ...prev,
       ...filters,
-      from: dateFilters.from,
-      to: dateFilters.to,
+      ...(dateFilters ? { from: dateFilters.from, to: dateFilters.to } : {}),
       page: pageFromUrl,
     }));
   }, [
@@ -239,8 +241,8 @@ export function AdminTrips() {
     filters.sortBy,
     filters.sortDir,
     filters.pageSize,
-    dateFilters.from,
-    dateFilters.to,
+    dateFilters?.from,
+    dateFilters?.to,
     pageFromUrl,
   ]);
 
@@ -270,12 +272,36 @@ export function AdminTrips() {
     setSearchParams(sp);
   };
 
+  const setDateRange = (from: string, to: string) => {
+    const next: Filters = { ...filters, page: 1 };
+    setFilters(next);
+    setDraft((prev) => ({ ...prev, ...next, from, to }));
+    const sp = new URLSearchParams(searchParams);
+    sp.set("from", from);
+    sp.set("to", to);
+    sp.set("page", "1");
+    setSearchParams(sp);
+  };
+
   const clearFilters = () => {
-    const today = todayLocalDateValue();
+    const { from, to } = defaultAdminListDateRange({ pastDays: 7, forwardDays: 7 });
     const next = defaultFilters();
     setFilters(next);
-    setDraft({ ...next, from: today, to: today });
-    setSearchParams({ from: today, to: today, page: "1" });
+    setDraft({ ...next, from, to });
+    setSearchParams({ from, to, page: "1" });
+  };
+
+  const clearDateFilter = () => {
+    const sp = new URLSearchParams(searchParams);
+    sp.delete("from");
+    sp.delete("to");
+    sp.set("page", "1");
+    setSearchParams(sp);
+    setDraft((prev) => {
+      const { from: _f, to: _t, ...rest } = prev;
+      return rest as FilterDraft;
+    });
+    setFilters((prev) => ({ ...prev, page: 1 }));
   };
 
   const setPage = (page: number) => {
@@ -323,13 +349,14 @@ export function AdminTrips() {
 
   const load = useCallback(
     async (opts?: { silent?: boolean }) => {
-      if (!searchParams.get("from")) return;
       const params: Record<string, unknown> = {
         ...filtersRef.current,
-        from: dateFilters.from,
-        to: dateFilters.to,
         page: pageFromUrl,
       };
+      if (dateFilters) {
+        params.from = dateFilters.from;
+        params.to = dateFilters.to;
+      }
       for (const k of Object.keys(params)) {
         if (params[k] === "" || params[k] == null) params[k] = undefined;
       }
@@ -492,12 +519,48 @@ export function AdminTrips() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <PageTitle
           title="Chuyến xe"
-          subtitle="Theo dõi chuyến đang gom, đang chạy và công nợ tài xế. Gom khách mới tại menu Điều phối (3 cột)."
+          subtitle="Mặc định xem 7 ngày qua → 7 ngày tới. Gom khách mới tại menu Điều phối."
         />
         <Link to="/admin/dispatch" className="btn-primary inline-flex items-center gap-2 py-2.5">
           <Car size={18} />
           Điều phối
         </Link>
+      </div>
+
+      <div className="card flex flex-col gap-2 border-brand-200 bg-blue-50/60 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <p className="text-sm text-brand-900">
+          <b>Lọc ngày khởi hành:</b>{" "}
+          {dateFilters
+            ? `${formatDisplayDate(dateFilters.from)} → ${formatDisplayDate(dateFilters.to)}`
+            : "Tất cả ngày"}
+          {!loading && <span className="text-slate-600"> · {meta.total} chuyến</span>}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {dateFilters && dateFilters.from === dateFilters.to && (
+            <button
+              type="button"
+              className="btn-primary py-1.5 text-xs"
+              onClick={() =>
+                setDateRange(dateFilters.from, addLocalDateDays(dateFilters.from, 7))
+              }
+            >
+              Mở thêm 7 ngày
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn-secondary py-1.5 text-xs"
+            onClick={() => {
+              const { from, to } = defaultAdminListDateRange({ pastDays: 7, forwardDays: 7 });
+              setDateRange(from, to);
+            }}
+          >
+            −7 → +7 ngày
+          </button>
+          <button type="button" className="btn-secondary py-1.5 text-xs" onClick={clearDateFilter}>
+            Tất cả ngày
+          </button>
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -766,11 +829,25 @@ export function AdminTrips() {
               {!loading && !items.length && (
                 <tr>
                   <td colSpan={10} className="px-4 py-12 text-center text-slate-500">
-                    Không có chuyến phù hợp bộ lọc (mặc định: hôm nay). Thử mở rộng <b>Từ ngày — Đến ngày</b>, hoặc{" "}
+                    Không có chuyến trong khoảng ngày đang lọc.{" "}
+                    <button
+                      type="button"
+                      className="font-bold text-brand-700 underline"
+                      onClick={() => {
+                        const { from, to } = defaultAdminListDateRange({ pastDays: 7, forwardDays: 30 });
+                        setDateRange(from, to);
+                      }}
+                    >
+                      Mở −7 → +30 ngày
+                    </button>{" "}
+                    ·{" "}
+                    <button type="button" className="font-bold text-brand-700 underline" onClick={clearDateFilter}>
+                      Xem tất cả
+                    </button>{" "}
+                    ·{" "}
                     <Link to="/admin/dispatch" className="font-bold text-brand-700">
-                      sang điều phối
-                    </Link>{" "}
-                    để tạo chuyến mới.
+                      Sang điều phối
+                    </Link>
                   </td>
                 </tr>
               )}

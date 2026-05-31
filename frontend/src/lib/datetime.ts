@@ -142,6 +142,27 @@ export function todayLocalDateValue(): string {
   return serverAppTime?.today ?? buildAppTimeFallback().today;
 }
 
+/** Cộng/trừ ngày trên chuỗi YYYY-MM-DD (giờ VN). */
+export function addLocalDateDays(dateValue: string, days: number): string {
+  const p = parseLocalDateTimeParts(dateValue);
+  if (!p) return dateValue;
+  const base = localPartsToDate({ ...p, hour: 12, minute: 0 });
+  const next = new Date(base.getTime() + days * 24 * 60 * 60 * 1000);
+  const np = zonedPartsFromInstant(next);
+  return `${np.year}-${pad(np.month)}-${pad(np.day)}`;
+}
+
+/** Khoảng ngày mặc định màn admin (điều phối / chuyến xe). */
+export function defaultAdminListDateRange(opts?: { pastDays?: number; forwardDays?: number }) {
+  const today = todayLocalDateValue();
+  const pastDays = opts?.pastDays ?? 0;
+  const forwardDays = opts?.forwardDays ?? 7;
+  return {
+    from: pastDays > 0 ? addLocalDateDays(today, -pastDays) : today,
+    to: addLocalDateDays(today, forwardDays),
+  };
+}
+
 export function defaultDepartureLocal(): string {
   const start = localPartsToDate(parseLocalDateTimeParts(todayLocalDateValue())!);
   const tomorrow = new Date(start.getTime() + 24 * 60 * 60 * 1000);
