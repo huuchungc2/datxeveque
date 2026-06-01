@@ -374,7 +374,7 @@ export function AdminTrips() {
         if (!opts?.silent) setLoading(false);
       }
     },
-    [dateFilters.from, dateFilters.to, pageFromUrl, searchParams]
+    [dateFilters?.from, dateFilters?.to, pageFromUrl, searchParams]
   );
 
   const refreshDetail = useCallback(async (id: number) => {
