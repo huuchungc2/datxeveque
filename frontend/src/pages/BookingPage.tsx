@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Helmet } from "react-helmet-async";
-import { useLocation, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { 
   ArrowLeft, ArrowRight, CalendarClock, CheckCircle2, MapPin, 
   ReceiptText, Route as RouteIcon, ShieldCheck, Users, Box 
@@ -31,6 +31,7 @@ import { useSiteSettings } from "../lib/useSiteSettings";
 import { BookingSuccessActions } from "../components/BookingCustomerDetail";
 import { FieldError } from "../components/ui/FieldError";
 import { GregorianDateTimeInput } from "../components/ui/GregorianDateInputs";
+import { QuantityStepper } from "../components/ui/QuantityStepper";
 import { focusFormField, inputInvalidClass } from "../lib/formFieldFocus";
 
 function canEstimatePrice(form: { type?: string; routeId?: string | number }) {
@@ -82,6 +83,7 @@ function bookingDraftKey(pathname: string) {
 
 export default function BookingPage({ type: initType, title: propTitle, defaultRouteId }: Props) {
   const location = useLocation();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { settings } = useSiteSettings();
   const menuService = findServiceByPath(location.pathname);
@@ -493,6 +495,33 @@ export default function BookingPage({ type: initType, title: propTitle, defaultR
     setStep((prev) => Math.max(1, prev - 1));
   };
 
+  const leaveBooking = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate("/");
+  };
+
+  const handleStepBack = () => {
+    if (step === 1) {
+      leaveBooking();
+      return;
+    }
+    prevStep();
+  };
+
+  const primaryStepLabel = () => {
+    if (step === 1) {
+      return isGoods ? "Tiếp tục — điểm lấy & giao" : "Tiếp tục chọn điểm đón";
+    }
+    if (step === 2) return "Nhập thông tin liên hệ";
+    if (loading) return "Đang xử lý...";
+    if (form.type === "CARGO") return "Gửi yêu cầu gửi hàng";
+    if (form.type === "MARKET") return "Gửi yêu cầu đi chợ";
+    return "Xác nhận đặt xe ngay";
+  };
+
   const submitBooking = async () => {
     if (!validateStep3Fields()) return;
     if (!validateStep2Fields(true, false)) {
@@ -585,8 +614,7 @@ export default function BookingPage({ type: initType, title: propTitle, defaultR
         <title>{propTitle || "Đặt xe trực tuyến"} | {settings.brand_name}</title>
       </Helmet>
 
-      <div className="page max-w-2xl py-6 pb-24 md:pb-8">
-        
+      <div className="page max-w-2xl py-6 pb-36 md:pb-8">
         {/* PROGRESS BAR */}
         <div className="mb-8 flex items-center justify-between px-2 text-xs font-bold uppercase tracking-wider text-slate-400">
           {(
@@ -692,20 +720,11 @@ export default function BookingPage({ type: initType, title: propTitle, defaultR
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
                     Số lượng hành khách
                   </label>
-                  <input
-                    type="number"
+                  <QuantityStepper
+                    aria-label="Số lượng hành khách"
                     min={1}
-                    max={10}
-                    step={1}
                     value={form.passengerCount}
-                    onChange={(e) => {
-                      const n = Number(e.target.value);
-                      setForm({
-                        ...form,
-                        passengerCount: Number.isFinite(n) ? Math.min(10, Math.max(1, Math.round(n))) : 1,
-                      });
-                    }}
-                    className="input h-12 w-full max-w-[8rem] rounded-xl"
+                    onChange={(passengerCount) => setForm({ ...form, passengerCount })}
                   />
                 </div>
               ) : form.type === "CARGO" ? (
@@ -773,10 +792,6 @@ export default function BookingPage({ type: initType, title: propTitle, defaultR
                   </select>
                 </div>
               ) : null}
-
-              <button type="button" onClick={nextStep} className="w-full h-12 btn-primary flex justify-center items-center gap-2 rounded-xl text-sm font-bold shadow-md mt-6">
-                {isGoods ? "Tiếp tục — điểm lấy & giao" : "Tiếp tục chọn điểm đón"} <ArrowRight size={16} />
-              </button>
             </div>
           )}
 
@@ -870,15 +885,6 @@ export default function BookingPage({ type: initType, title: propTitle, defaultR
                   </div>
                 </>
               )}
-
-              <div className="flex gap-3 pt-4">
-                <button type="button" onClick={prevStep} className="w-1/3 h-12 btn-ghost flex justify-center items-center gap-2 rounded-xl text-sm font-bold">
-                  <ArrowLeft size={16} /> Quay lại
-                </button>
-                <button type="button" onClick={nextStep} className="w-2/3 h-12 btn-primary flex justify-center items-center gap-2 rounded-xl text-sm font-bold shadow-md">
-                  Nhập thông tin liên hệ <ArrowRight size={16} />
-                </button>
-              </div>
             </div>
           )}
 
@@ -1035,23 +1041,36 @@ export default function BookingPage({ type: initType, title: propTitle, defaultR
               <label className="block text-sm font-bold text-slate-900">Ghi chú bổ sung (nếu có)
                 <textarea className="input mt-2 p-3" rows={3} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="Ví dụ: Xe có trẻ em, mang theo nhiều đồ cồng kềnh..." />
               </label>
-
-              <div className="flex gap-3 pt-4">
-                <button type="button" onClick={prevStep} className="w-1/3 h-12 btn-ghost flex justify-center items-center gap-2 rounded-xl text-sm font-bold">
-                  <ArrowLeft size={16} /> Quay lại
-                </button>
-                <button type="button" disabled={loading} onClick={submitBooking} className="w-2/3 h-12 btn-primary bg-cta-500 hover:bg-cta-600 flex justify-center items-center gap-2 rounded-xl text-sm font-bold shadow-lg disabled:opacity-50">
-                  {loading
-                    ? "Đang xử lý..."
-                    : form.type === "CARGO"
-                      ? "Gửi yêu cầu gửi hàng"
-                      : form.type === "MARKET"
-                        ? "Gửi yêu cầu đi chợ"
-                        : "Xác nhận đặt xe ngay"}
-                </button>
-              </div>
             </div>
           )}
+
+          <div className="mt-6 flex gap-3 border-t border-slate-100 pt-5">
+            <button
+              type="button"
+              onClick={handleStepBack}
+              className="flex h-12 w-1/3 items-center justify-center gap-2 rounded-xl text-sm font-bold btn-ghost"
+            >
+              <ArrowLeft size={16} /> Quay lại
+            </button>
+            {step < 3 ? (
+              <button
+                type="button"
+                onClick={nextStep}
+                className="flex h-12 w-2/3 items-center justify-center gap-2 rounded-xl text-sm font-bold shadow-md btn-primary"
+              >
+                {primaryStepLabel()} <ArrowRight size={16} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={loading}
+                onClick={submitBooking}
+                className="flex h-12 w-2/3 items-center justify-center gap-2 rounded-xl text-sm font-bold shadow-lg btn-primary bg-cta-500 hover:bg-cta-600 disabled:opacity-50"
+              >
+                {primaryStepLabel()}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* REASSURANCE BANNER */}
