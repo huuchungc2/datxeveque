@@ -11,9 +11,9 @@ React + Vite + TS + Tailwind | Express + TS + Prisma + MySQL | JWT HttpOnly cook
 
 ## Trước khi code feature
 
-1. Đọc spec liên quan: `01`–`13_*.md` ở root (dispatch → `04_DISPATCH_FLOW_SPEC.md`).
+1. Đọc doc gom: `DOCS_MASTER.md`, `DOCS_CORE_FLOWS.md`, `DOCS_DISPATCH_SETTLEMENT.md`, `DOCS_DEPLOY_SECURITY.md`.
 2. Prisma schema là nguồn chuẩn DB; SQL restore phải khớp schema.
-3. Rà tiến độ: `PROGRESS.md` và tick `12_ACCEPTANCE_TEST_FULL.md` sau khi test.
+3. Cập nhật `DOCS_MASTER.md` (TODO/Test status/Changelog) sau khi fix/feature lớn.
 
 ## Cấm
 
@@ -31,4 +31,4 @@ React + Vite + TS + Tailwind | Express + TS + Prisma + MySQL | JWT HttpOnly cook
 
 ## Chạy local
 
-`restore-db.bat` → `start-local.bat` | API :4002 | Web :5173 | Demo: `README.md`
+`restore-db.bat` → `start-local.bat` | API :4002 | Web :5173 | Doc: `DOCS_MASTER.md`

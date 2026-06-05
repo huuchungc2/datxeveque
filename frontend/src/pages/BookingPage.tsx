@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Helmet } from "react-helmet-async";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { 
   ArrowLeft, ArrowRight, CalendarClock, CheckCircle2, MapPin, 
@@ -33,6 +32,8 @@ import { FieldError } from "../components/ui/FieldError";
 import { GregorianDateTimeInput } from "../components/ui/GregorianDateInputs";
 import { QuantityStepper } from "../components/ui/QuantityStepper";
 import { focusFormField, inputInvalidClass } from "../lib/formFieldFocus";
+import { SEOHead } from "../components/SEOHead";
+import { getBrandAssets } from "../lib/useSiteSettings";
 
 function canEstimatePrice(form: { type?: string; routeId?: string | number }) {
   if (!form.type) return false;
@@ -86,6 +87,7 @@ export default function BookingPage({ type: initType, title: propTitle, defaultR
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { settings } = useSiteSettings();
+  const brand = getBrandAssets(settings);
   const menuService = findServiceByPath(location.pathname);
   const resolvedType = menuService?.type ?? initType ?? "SHARED_RIDE";
   const serviceLabel = menuService?.menuLabel ?? serviceTypeLabel[resolvedType] ?? resolvedType;
@@ -149,6 +151,15 @@ export default function BookingPage({ type: initType, title: propTitle, defaultR
     api.get("/routes").then((res) => setRoutes(unwrapList(res.data))).catch(() => {});
   }, []);
 
+  /** ?route=slug từ trang SEO tuyến → tự chọn routeId khi API đã load. */
+  useEffect(() => {
+    const routeSlug = searchParams.get("route");
+    if (!routeSlug || routes.length === 0) return;
+    const match = routes.find((r) => r.slug === routeSlug);
+    if (!match?.id) return;
+    setForm((f) => (Number(f.routeId) === Number(match.id) ? f : { ...f, routeId: match.id }));
+  }, [routes, searchParams]);
+
   /** Chỉ reset bước khi đổi route dịch vụ (/dat-xe → /gui-hang). Không reset khi Quay lại giữa các bước. */
   useEffect(() => {
     const pathChanged = pathnameRef.current !== null && pathnameRef.current !== location.pathname;
@@ -156,7 +167,8 @@ export default function BookingPage({ type: initType, title: propTitle, defaultR
 
     const qAt = searchParams.get("scheduledAt");
     const qRoute = searchParams.get("routeId");
-    const hasQuery = Boolean(qAt || qRoute);
+    const qRouteSlug = searchParams.get("route");
+    const hasQuery = Boolean(qAt || qRoute || qRouteSlug);
 
     if (pathChanged) {
       setMaxStepReached(1);
@@ -569,7 +581,13 @@ export default function BookingPage({ type: initType, title: propTitle, defaultR
     const bookedPhone = normalizeVnPhone(form.customerPhone) || form.customerPhone;
     return (
       <div className="page max-w-xl py-10 text-center">
-        <Helmet><title>{successTitle} | {settings.brand_name}</title></Helmet>
+        <SEOHead
+          title={`${successTitle} | ${settings.brand_name || brand.brandName}`}
+          description="Yêu cầu của bạn đã được ghi nhận. Nhân viên sẽ liên hệ xác nhận qua điện thoại/Zalo."
+          canonicalPath={location.pathname}
+          ogImage={brand.logoUrl}
+          noIndex
+        />
         <div className="panel flex flex-col items-center p-8 shadow-xl">
           <div className="rounded-full bg-emerald-50 p-4 text-emerald-600 mb-4">
             <CheckCircle2 size={48} />
@@ -610,9 +628,28 @@ export default function BookingPage({ type: initType, title: propTitle, defaultR
 
   return (
     <>
-      <Helmet>
-        <title>{propTitle || "Đặt xe trực tuyến"} | {settings.brand_name}</title>
-      </Helmet>
+      <SEOHead
+        title={
+          location.pathname === "/dat-xe"
+            ? "Đặt Xe Về Quê Nhanh Chóng | Gọi Xe 4 Chỗ, 7 Chỗ, Xe Ghép"
+            : location.pathname === "/gui-hang"
+              ? "Gửi Hàng Về Quê | Gửi Hàng Theo Tuyến Xe Nhanh Gọn"
+              : location.pathname === "/di-cho-que"
+                ? "Đi Chợ Quê | Đặt Mua Đặc Sản, Hàng Quê Theo Nhu Cầu"
+                : `${propTitle || "Đặt xe trực tuyến"} | ${settings.brand_name || brand.brandName}`
+        }
+        description={
+          location.pathname === "/dat-xe"
+            ? "Đặt xe về quê online nhanh chóng. Chọn tuyến, loại dịch vụ, số khách, điểm đón trả và gửi yêu cầu đặt xe dễ dàng."
+            : location.pathname === "/gui-hang"
+              ? "Dịch vụ gửi hàng về quê theo tuyến xe, hỗ trợ nhận gửi hàng linh hoạt, phù hợp hàng cá nhân, quà quê, đồ dùng cần chuyển nhanh."
+              : location.pathname === "/di-cho-que"
+                ? "Dịch vụ đi chợ quê hỗ trợ đặt mua hàng quê, đặc sản, thực phẩm và giao theo tuyến xe phù hợp nhu cầu khách hàng."
+                : "Gửi yêu cầu đặt xe nhanh chóng, chọn tuyến, thời gian và điểm đón trả phù hợp."
+        }
+        canonicalPath={location.pathname}
+        ogImage={brand.logoUrl}
+      />
 
       <div className="page max-w-2xl py-6 pb-36 md:pb-8">
         {/* PROGRESS BAR */}

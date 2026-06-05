@@ -11,8 +11,8 @@ import { customerRouter } from "./routes/customer.js";
 import { notificationsRouter } from "./routes/notifications.js";
 import { setupRouter } from "./routes/setup.js";
 import { prisma } from "./lib/prisma.js";
-import { publicRouteWhere } from "./lib/routes.js";
 import { bootstrapAuthOnStartup } from "./lib/bootstrapAuth.js";
+import { buildRobotsTxt, buildSitemapXml } from "./lib/sitemap.js";
 import { telegramNotifyEnabled } from "./lib/telegramNotify.js";
 import { apiResponseMiddleware } from "./middleware/apiResponse.js";
 
@@ -102,15 +102,17 @@ app.use("/api/customer", customerRouter);
 app.use("/api/notifications", notificationsRouter);
 
 app.get("/robots.txt", (_req, res) => {
-  res.type("text/plain").send(`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /driver\nDisallow: /api\nSitemap: ${process.env.PUBLIC_SITE_URL || "http://localhost:5173"}/sitemap.xml\n`);
+  res.type("text/plain; charset=utf-8").send(buildRobotsTxt());
 });
 
 app.get("/sitemap.xml", async (_req, res) => {
-  const base = process.env.PUBLIC_SITE_URL || "http://localhost:5173";
-  const routes = await prisma.route.findMany({ where: publicRouteWhere() });
-  const posts = await prisma.post.findMany({ where: { status: "PUBLISHED" } });
-  const urls = ["", "dat-xe", "gui-hang", "di-cho-que", "thue-xe-hop-dong", "xe-dam-cuoi", "xe-tham-quan", "xe-di-benh-vien", "xe-san-bay", "kinh-nghiem", "tra-cuu-don", "lien-he", ...routes.map((r) => r.slug), ...posts.map((p) => `kinh-nghiem/${p.slug}`)];
-  res.type("application/xml").send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls.map((u) => `<url><loc>${base}/${u}</loc></url>`).join("")}</urlset>`);
+  try {
+    const xml = await buildSitemapXml();
+    res.type("application/xml; charset=utf-8").send(xml);
+  } catch (e) {
+    console.error("GET /sitemap.xml error:", e);
+    res.status(500).type("text/plain").send("Không tạo được sitemap");
+  }
 });
 
 app.listen(port, host, () => {

@@ -12,4 +12,4 @@ alwaysApply: false
 - Dispatch data: `GET /api/admin/dispatch`.
 - Pricing: `lib/pricing.ts` — có `routeId` ưu tiên giá tuyến, không routeId chỉ global.
 - Upload: `POST /api/admin/media/upload` — sharp WebP, bắt `altText`.
-- Ưu tiên format spec `03_API_CONTRACT_FULL.md` (`{ success, data, message }`) khi thêm/sửa endpoint.
+- Ưu tiên doc gom `DOCS_CORE_FLOWS.md` (format `{ success, data, message }`) khi thêm/sửa endpoint.

@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from "react";
-import { Helmet } from "react-helmet-async";
 import { useNavigate } from "react-router-dom";
 import { Car, Box, ShoppingBasket, Users, MapPin, ArrowRightLeft, Calendar } from "lucide-react";
 import { api, unwrapList } from "../lib/api";
@@ -12,6 +11,8 @@ import { FieldError } from "../components/ui/FieldError";
 import { GregorianDateTimeInput } from "../components/ui/GregorianDateInputs";
 import { focusFormField, inputInvalidClass } from "../lib/formFieldFocus";
 import { coreBookableServices } from "../routes/bookableServices";
+import { SEOHead } from "../components/SEOHead";
+import { getBrandAssets, useSiteSettings } from "../lib/useSiteSettings";
 
 const serviceIcons: Record<string, typeof Car> = {
   SHARED_RIDE: Car,
@@ -32,6 +33,8 @@ const serviceDesc: Record<string, string> = {
 export default function HomePage() {
   const navigate = useNavigate();
   const [routes, setRoutes] = useState<any[]>([]);
+  const { settings } = useSiteSettings();
+  const brand = getBrandAssets(settings);
   
   const [searchForm, setSearchForm] = useState({
     routeId: "",
@@ -99,10 +102,12 @@ export default function HomePage() {
 
   return (
     <>
-      <Helmet>
-        <title>Đặt Xe Về Quê | Hệ Thống Đặt Xe Đường Dài Thông Minh</title>
-        <meta name="description" content="Đặt xe Sài Gòn đi Đức Linh, Tánh Linh và ngược lại. Xe ghép, bao xe, gửi hàng nhanh chóng." />
-      </Helmet>
+      <SEOHead
+        title="Đặt Xe Về Quê | Xe 4 Chỗ, 7 Chỗ, Xe Ghép Tận Nơi"
+        description="Đặt xe về quê nhanh chóng, an toàn, tiện lợi. Hỗ trợ xe 4 chỗ, 7 chỗ, xe ghép, gửi hàng, đi chợ quê, đưa đón tận nơi."
+        canonicalPath="/"
+        ogImage={brand.logoUrl}
+      />
 
       {/* 1. HERO SECTION & FORM TÌM KIẾM NHANH */}
       <section className="relative bg-gradient-to-br from-slate-900 via-brand-950 to-slate-900 py-12 text-white md:py-20">

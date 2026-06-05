@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { AdminRoutes, AdminPricing } from "./AdminCatalog";
-import { AdminPosts, AdminMedia } from "./AdminContent";
 
 function Tabs({ tabs, active, onChange }: { tabs: { id: string; label: string }[]; active: string; onChange: (id: string) => void }) {
   return (
@@ -29,12 +28,3 @@ export function AdminCatalogHub() {
   );
 }
 
-export function AdminContentHub() {
-  const [tab, setTab] = useState("posts");
-  return (
-    <div>
-      <Tabs tabs={[{ id: "posts", label: "Bài viết" }, { id: "media", label: "Thư viện ảnh" }]} active={tab} onChange={setTab} />
-      {tab === "posts" ? <AdminPosts /> : <AdminMedia />}
-    </div>
-  );
-}

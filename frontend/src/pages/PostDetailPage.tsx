@@ -1,98 +1,186 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Helmet } from "react-helmet-async";
-import { ArrowLeft, Calendar, User, Car, Box, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Calendar, ChevronRight } from "lucide-react";
 import { api } from "../lib/api";
 import { EmptyState } from "../components/ui/DesignKit";
-
-function sanitizeHtml(html: string) {
-  return String(html || "")
-    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
-    .replace(/\son\w+\s*=\s*"[^"]*"/gi, "")
-    .replace(/\son\w+\s*=\s*'[^']*'/gi, "")
-    .replace(/javascript:/gi, "");
-}
+import { SEOHead } from "../components/SEOHead";
+import { PostExperienceCta } from "../components/PostExperienceCta";
+import { getBrandAssets, useSiteSettings } from "../lib/useSiteSettings";
+import { sanitizeHtml } from "../lib/sanitizeHtml";
+import {
+  buildArticleJsonLd,
+  extractPostCover,
+  formatPostDate,
+  POST_ARTICLE_PROSE_CLASS,
+  type PublicPost,
+} from "../lib/postArticle";
 
 export function PostDetailPage() {
   const { slug } = useParams();
-  const [post, setPost] = useState<any>();
+  const [post, setPost] = useState<PublicPost | null>(null);
+  const [related, setRelated] = useState<PublicPost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+  const { settings } = useSiteSettings();
+  const brand = getBrandAssets(settings);
 
-  useEffect(() => { 
-    api.get(`/posts/${slug}`).then((r) => setPost(r.data)); 
+  useEffect(() => {
+    if (!slug) return;
+    setLoading(true);
+    setNotFound(false);
+    api
+      .get(`/posts/${slug}`)
+      .then((r) => setPost(r.data))
+      .catch(() => {
+        setPost(null);
+        setNotFound(true);
+      })
+      .finally(() => setLoading(false));
   }, [slug]);
 
-  const safeContent = useMemo(() => sanitizeHtml(post?.content || ""), [post?.content]);
+  useEffect(() => {
+    api
+      .get("/posts")
+      .then((r) => {
+        const list: PublicPost[] = Array.isArray(r.data) ? r.data : [];
+        setRelated(list.filter((p) => p.slug !== slug).slice(0, 3));
+      })
+      .catch(() => setRelated([]));
+  }, [slug]);
 
-  if (!post) return <div className="page py-10"><EmptyState title="Đang tải bài viết" subtitle="Vui lòng chờ trong giây lát." /></div>;
+  const cover = useMemo(
+    () => (post ? extractPostCover(post.content, post.title) : { url: "", alt: "" }),
+    [post]
+  );
+
+  const safeContent = useMemo(
+    () => (post ? sanitizeHtml(post.content) : ""),
+    [post?.content]
+  );
+
+  const articleJsonLd = useMemo(
+    () => (post ? buildArticleJsonLd(post, cover.url) : undefined),
+    [post, cover.url]
+  );
+
+  if (loading) {
+    return (
+      <div className="page py-10">
+        <EmptyState title="Đang tải bài viết" subtitle="Vui lòng chờ trong giây lát." />
+      </div>
+    );
+  }
+
+  if (notFound || !post) {
+    return (
+      <div className="page py-10">
+        <EmptyState title="Không tìm thấy bài viết" subtitle="Bài có thể đã gỡ hoặc chưa xuất bản." />
+        <div className="mt-6 text-center">
+          <Link to="/kinh-nghiem" className="text-sm font-bold text-brand-700 hover:underline">
+            ← Quay lại Kinh nghiệm
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <article className="page max-w-6xl py-8 md:py-12">
-      <Helmet>
-        <title>{post.seoTitle || post.title}</title>
-        <meta name="description" content={post.seoDescription || post.excerpt} />
-      </Helmet>
+    <div className="page py-6 md:py-10">
+      <SEOHead
+        title={post.seoTitle || post.title}
+        description={post.seoDescription || post.excerpt || ""}
+        canonicalPath={`/kinh-nghiem/${post.slug}`}
+        ogImage={cover.url.startsWith("/") ? cover.url : brand.logoUrl}
+        jsonLd={articleJsonLd}
+      />
 
-      <div className="mb-6">
-        <Link to="/bai-viet" className="inline-flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-brand-700 transition">
-          <ArrowLeft size={16} /> Quay lại danh sách bài viết
+      <article className="mx-auto max-w-3xl">
+        <Link
+          to="/kinh-nghiem"
+          className="mb-5 inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 transition hover:text-brand-700"
+        >
+          <ArrowLeft size={16} />
+          Kinh nghiệm
         </Link>
-      </div>
 
-      <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
-        <div className="panel bg-white p-6 md:p-10 rounded-3xl shadow-card">
-          <span className="badge badge-info mb-4">{post.category?.name || "Cẩm nang"}</span>
-          <h1 className="text-2xl md:text-4xl font-extrabold tracking-tight text-ink-900 leading-tight">
-            {post.title}
-          </h1>
-
-          <div className="mt-4 flex flex-wrap items-center gap-4 border-b border-slate-100 pb-6 text-sm text-slate-500">
-            <span className="flex items-center gap-1.5"><User size={16} /> Ban biên tập</span>
-            <span className="flex items-center gap-1.5"><Calendar size={16} /> Mới nhất</span>
-          </div>
-
-          {post.excerpt && (
-            <div className="mt-6 rounded-2xl border-l-4 border-brand-500 bg-slate-50 p-4 italic text-slate-600 text-base leading-relaxed">
-              "{post.excerpt}"
-            </div>
-          )}
-
-          <div 
-            className="prose prose-slate max-w-none mt-8 text-ink-900 leading-7 space-y-4 font-normal
-              prose-headings:font-extrabold prose-headings:text-ink-900
-              prose-p:text-slate-600 prose-p:leading-relaxed
-              prose-img:rounded-2xl prose-img:border"
-            dangerouslySetInnerHTML={{ __html: safeContent }}
+        <div className="-mx-4 overflow-hidden bg-white shadow-card sm:mx-0 sm:rounded-3xl">
+          <img
+            src={cover.url}
+            alt={cover.alt}
+            className="aspect-[16/10] w-full object-cover sm:aspect-[2/1] md:aspect-[21/9]"
+            loading="eager"
           />
-        </div>
 
-        <div className="space-y-6">
-          <div className="panel bg-gradient-to-br from-brand-900 to-slate-900 p-6 text-white border-0 shadow-xl relative overflow-hidden rounded-3xl">
-            <h3 className="text-lg font-bold">Lên lịch về quê ngay?</h3>
-            <p className="mt-2 text-sm text-slate-300 leading-relaxed">
-              Hệ thống điều xe ghép và bao xe hoạt động 24/7, cam kết xe đời mới đón trả tận nơi.
-            </p>
-            <div className="mt-5 space-y-3">
-              <Link to="/dat-xe" className="btn-primary w-full justify-center !rounded-xl text-center flex items-center gap-2">
-                <Car size={16} /> Đặt xe ghép / Bao xe
-              </Link>
-              <Link to="/dat-xe" className="btn-ghost w-full justify-center !rounded-xl !bg-white/10 !border-white/10 !text-white hover:!bg-white/20 flex items-center gap-2">
-                <Box size={16} /> Gửi hàng 2 chiều
-              </Link>
+          <div className="px-4 py-7 sm:px-5 sm:py-8 md:px-10 md:py-10">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500">
+              <span className="badge badge-info">{post.category?.name || "Kinh nghiệm"}</span>
+              <span className="flex items-center gap-1.5">
+                <Calendar size={14} />
+                {formatPostDate(post.publishedAt)}
+              </span>
+            </div>
+
+            <h1 className="mt-4 text-2xl font-extrabold leading-tight tracking-tight text-ink-900 md:text-[2rem]">
+              {post.title}
+            </h1>
+
+            {post.excerpt && (
+              <p className="mt-4 text-base leading-relaxed text-slate-600 md:text-lg">{post.excerpt}</p>
+            )}
+
+            <div
+              className={`${POST_ARTICLE_PROSE_CLASS} mt-8 border-t border-slate-100 pt-8`}
+              dangerouslySetInnerHTML={{ __html: safeContent }}
+            />
+
+            <div className="mt-10 border-t border-slate-100 pt-8">
+              <PostExperienceCta compact />
             </div>
           </div>
-
-          <div className="panel bg-white p-5 rounded-3xl shadow-card space-y-4">
-            <h4 className="font-bold text-sm uppercase tracking-wider text-slate-400">Cam kết nhà xe</h4>
-            <div className="flex items-start gap-3">
-              <ShieldCheck className="mt-0.5 text-green-600 shrink-0" size={18} />
-              <div>
-                <b className="text-sm block text-ink-900">Đúng giờ - Đúng tuyến</b>
-                <p className="text-xs text-slate-500 mt-0.5">Tài xế liên hệ trước ít nhất 30 phút.</p>
-              </div>
-            </div>
-          </div>
         </div>
-      </div>
-    </article>
+
+        {related.length > 0 && (
+          <section className="mt-12">
+            <h2 className="text-lg font-extrabold text-ink-900">Đọc tiếp</h2>
+            <ul className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {related.map((r) => {
+                const thumb = extractPostCover(r.content, r.title);
+                return (
+                  <li key={r.id}>
+                    <Link
+                      to={`/kinh-nghiem/${r.slug}`}
+                      className="group flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white transition hover:border-brand-200 hover:shadow-md"
+                    >
+                      <img
+                        src={thumb.url}
+                        alt={thumb.alt}
+                        className="h-28 w-full object-cover transition group-hover:scale-[1.02]"
+                        loading="lazy"
+                      />
+                      <div className="flex flex-1 flex-col p-3">
+                        <p className="line-clamp-2 text-sm font-bold text-slate-900 group-hover:text-brand-700">
+                          {r.title}
+                        </p>
+                        <p className="mt-1 line-clamp-2 text-xs text-slate-500">{r.excerpt}</p>
+                      </div>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
+
+        <nav className="mt-8 text-xs text-slate-400" aria-label="Breadcrumb">
+          <Link to="/" className="hover:text-brand-700">
+            Trang chủ
+          </Link>
+          <ChevronRight size={12} className="mx-0.5 inline" />
+          <Link to="/kinh-nghiem" className="hover:text-brand-700">
+            Kinh nghiệm
+          </Link>
+        </nav>
+      </article>
+    </div>
   );
 }

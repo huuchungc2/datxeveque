@@ -49,5 +49,20 @@ export function unwrapList<T = any>(payload: any): T[] {
   return [];
 }
 
+/** Hỗ trợ API trả mảng thuần hoặc `{ items, page, total, totalPages }`. */
+export function parsePaginated<T = any>(payload: any) {
+  if (Array.isArray(payload)) {
+    return { items: payload as T[], page: 1, pageSize: payload.length, total: payload.length, totalPages: 1 };
+  }
+  const items = unwrapList<T>(payload);
+  return {
+    items,
+    page: Number(payload?.page || 1),
+    pageSize: Number(payload?.pageSize || payload?.limit || items.length || 15),
+    total: Number(payload?.total ?? items.length),
+    totalPages: Number(payload?.totalPages || 1),
+  };
+}
+
 export const formatMoney = (value?: number | string | null) =>
   new Intl.NumberFormat("vi-VN").format(Number(value || 0)) + "đ";

@@ -10,7 +10,21 @@ export const SITE_SETTINGS_DEFAULTS: SiteSettings = {
   zalo_phone: "",
   zalo_url: "",
   service_area: "",
+  logo_url: "",
+  favicon_url: "",
 };
+
+/** Logo/icon từ API; fallback file brand local khi admin chưa cấu hình URL. */
+export function getBrandAssets(settings: SiteSettings) {
+  const brandName = (settings.brand_name || SITE_SETTINGS_DEFAULTS.brand_name || "").trim();
+  const logoFromApi = (settings.logo_url || "").trim();
+  const iconFromApi = (settings.favicon_url || "").trim();
+  return {
+    brandName,
+    logoUrl: logoFromApi || "/brand/logo-dat-xe-ve-que-header.webp",
+    iconUrl: iconFromApi || logoFromApi || "/brand/icon-dat-xe-ve-que.webp",
+  };
+}
 
 function phoneFromZaloUrl(url: string) {
   const m = String(url || "").match(/zalo\.me\/(0?\d{9,10})/i);

@@ -11,17 +11,25 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import HomePage from './pages/HomePage';
 import BookingPage from './pages/BookingPage';
 import RoutePage from './pages/RoutePage';
+import RouteSeoPage from './pages/RouteSeoPage';
 import { LoginPage, RegisterPage, ForgotPasswordPage, ResetPasswordPage } from './pages/AuthPages';
 import { PostsPage } from './pages/PostsPage';
 import { PostDetailPage } from './pages/PostDetailPage';
-import { AdminDashboard, AdminReports, AdminSettings, AdminUsers } from './pages/AdminPages';
+import { AdminDashboard, AdminReports, AdminSettings } from './pages/AdminPages';
+import { AdminContentLayout } from './pages/admin/AdminContentLayout';
+import { AdminPostList } from './pages/admin/AdminPostList';
+import { AdminPostFormPage } from './pages/admin/AdminPostFormPage';
+import { AdminMediaList } from './pages/admin/AdminMediaList';
+import { AdminMediaUploadPage } from './pages/admin/AdminMediaUploadPage';
+import { AdminUserList } from './pages/admin/AdminUserList';
+import { AdminUserFormPage } from './pages/admin/AdminUserFormPage';
 import { AdminDrivers } from './pages/AdminDrivers';
 import { AdminTrips } from './pages/AdminTrips';
 import { AdminBookings } from './pages/AdminBookings';
 import { AdminBookingDetail } from './pages/AdminBookingDetail';
 import { AdminDispatch } from './pages/AdminDispatch';
 import { AdminDebts } from './pages/AdminFinance';
-import { AdminCatalogHub, AdminContentHub } from './pages/AdminHubPages';
+import { AdminCatalogHub } from './pages/AdminHubPages';
 import { TrackBookingPage } from './pages/TrackBookingPage';
 import ContactPage from './pages/ContactPage';
 import { DriverAvailability, DriverDebts, DriverJobs, DriverNotifications } from './pages/DriverPages';
@@ -53,6 +61,8 @@ function App(){return <HelmetProvider><SiteSettingsProvider><AuthProvider><Brows
 <Route path="/lien-he" element={<PublicLayout><ContactPage/></PublicLayout>} />
 <Route path="/kinh-nghiem" element={<PublicLayout><PostsPage/></PublicLayout>} />
 <Route path="/kinh-nghiem/:slug" element={<PublicLayout><PostDetailPage/></PublicLayout>} />
+<Route path="/xe-sai-gon-di-duc-linh" element={<PublicLayout><RouteSeoPage slug="xe-sai-gon-di-duc-linh" /></PublicLayout>} />
+<Route path="/xe-sai-gon-di-tanh-linh" element={<PublicLayout><RouteSeoPage slug="xe-sai-gon-di-tanh-linh" /></PublicLayout>} />
 <Route path="/:slug" element={<PublicLayout><RoutePage/></PublicLayout>} />
 <Route path="/admin" element={<ProtectedRoute roles={["ADMIN","DISPATCHER","ACCOUNTANT"]}><DashboardLayout type="admin"><AdminDashboard/></DashboardLayout></ProtectedRoute>} />
 <Route path="/admin/don-hang" element={<ProtectedRoute roles={["ADMIN","DISPATCHER","ACCOUNTANT"]}><DashboardLayout type="admin"><AdminBookings/></DashboardLayout></ProtectedRoute>} />
@@ -61,13 +71,22 @@ function App(){return <HelmetProvider><SiteSettingsProvider><AuthProvider><Brows
 <Route path="/admin/dieu-phoi" element={<ProtectedRoute roles={["ADMIN","DISPATCHER","ACCOUNTANT"]}><DashboardLayout type="admin"><AdminTrips/></DashboardLayout></ProtectedRoute>} />
 <Route path="/admin/chuyen-xe" element={<Navigate to="/admin/dieu-phoi" replace />} />
 <Route path="/admin/tai-xe" element={<ProtectedRoute roles={["ADMIN","DISPATCHER","ACCOUNTANT"]}><DashboardLayout type="admin"><AdminDrivers/></DashboardLayout></ProtectedRoute>} />
-<Route path="/admin/users" element={<ProtectedRoute roles={["ADMIN"]}><DashboardLayout type="admin"><AdminUsers/></DashboardLayout></ProtectedRoute>} />
+<Route path="/admin/users" element={<ProtectedRoute roles={["ADMIN"]}><DashboardLayout type="admin"><AdminUserList/></DashboardLayout></ProtectedRoute>} />
+<Route path="/admin/users/moi" element={<ProtectedRoute roles={["ADMIN"]}><DashboardLayout type="admin"><AdminUserFormPage/></DashboardLayout></ProtectedRoute>} />
+<Route path="/admin/users/:id" element={<ProtectedRoute roles={["ADMIN"]}><DashboardLayout type="admin"><AdminUserFormPage/></DashboardLayout></ProtectedRoute>} />
 <Route path="/admin/bao-cao" element={<ProtectedRoute roles={["ADMIN","ACCOUNTANT"]}><DashboardLayout type="admin"><AdminReports/></DashboardLayout></ProtectedRoute>} />
 <Route path="/admin/cong-no" element={<ProtectedRoute roles={["ADMIN","ACCOUNTANT"]}><DashboardLayout type="admin"><AdminDebts/></DashboardLayout></ProtectedRoute>} />
 <Route path="/admin/danh-muc" element={<ProtectedRoute roles={["ADMIN"]}><DashboardLayout type="admin"><AdminCatalogHub/></DashboardLayout></ProtectedRoute>} />
-<Route path="/admin/noi-dung" element={<ProtectedRoute roles={["ADMIN"]}><DashboardLayout type="admin"><AdminContentHub/></DashboardLayout></ProtectedRoute>} />
-<Route path="/admin/bai-viet" element={<Navigate to="/admin/noi-dung" replace />} />
-<Route path="/admin/media" element={<Navigate to="/admin/noi-dung" replace />} />
+<Route path="/admin/noi-dung" element={<ProtectedRoute roles={["ADMIN"]}><DashboardLayout type="admin"><AdminContentLayout/></DashboardLayout></ProtectedRoute>}>
+  <Route index element={<Navigate to="bai-viet" replace />} />
+  <Route path="bai-viet" element={<AdminPostList />} />
+  <Route path="bai-viet/moi" element={<AdminPostFormPage />} />
+  <Route path="bai-viet/:id" element={<AdminPostFormPage />} />
+  <Route path="media" element={<AdminMediaList />} />
+  <Route path="media/tai-len" element={<AdminMediaUploadPage />} />
+</Route>
+<Route path="/admin/bai-viet" element={<Navigate to="/admin/noi-dung/bai-viet" replace />} />
+<Route path="/admin/media" element={<Navigate to="/admin/noi-dung/media" replace />} />
 <Route path="/admin/tuyen" element={<Navigate to="/admin/danh-muc" replace />} />
 <Route path="/admin/gia" element={<Navigate to="/admin/danh-muc" replace />} />
 <Route path="/admin/cai-dat" element={<ProtectedRoute roles={["ADMIN"]}><DashboardLayout type="admin"><AdminSettings/></DashboardLayout></ProtectedRoute>} />

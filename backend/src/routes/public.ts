@@ -185,7 +185,10 @@ publicRouter.get("/posts", async (_req, res) => {
 
 publicRouter.get("/posts/:slug", async (req, res) => {
   try {
-    const post = await prisma.post.findUnique({ where: { slug: req.params.slug }, include: { category: true } });
+    const post = await prisma.post.findFirst({
+      where: { slug: req.params.slug, status: "PUBLISHED" },
+      include: { category: true },
+    });
     if (!post) return res.status(404).json({ message: "Không tìm thấy bài viết" });
     res.json(post);
   } catch (error) {

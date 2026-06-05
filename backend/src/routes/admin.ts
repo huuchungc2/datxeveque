@@ -178,9 +178,41 @@ adminRouter.get("/users", async (req, res) => {
   const where: any = {};
   if (req.query.role) where.role = req.query.role;
   if (req.query.status) where.status = req.query.status;
-  if (req.query.q) where.OR = [{ name: { contains: String(req.query.q) } }, { phone: { contains: String(req.query.q) } }, { email: { contains: String(req.query.q) } }];
-  const users = await prisma.user.findMany({ where, orderBy: { createdAt: "desc" }, include: userInclude });
-  res.json(users.map(({ passwordHash, ...u }) => u));
+  const q = String(req.query.q || "").trim();
+  if (q) {
+    where.OR = [
+      { name: { contains: q } },
+      { phone: { contains: q } },
+      { email: { contains: q } },
+    ];
+  }
+  const { page, limit, skip } = parsePageQuery(req.query as Record<string, unknown>, { limit: 15 });
+  const [total, users] = await Promise.all([
+    prisma.user.count({ where }),
+    prisma.user.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      include: userInclude,
+      skip,
+      take: limit,
+    }),
+  ]);
+  res.json({
+    items: users.map(({ passwordHash, ...u }) => u),
+    page,
+    pageSize: limit,
+    total,
+    totalPages: Math.max(1, Math.ceil(total / limit)),
+  });
+});
+
+adminRouter.get("/users/:id", adminOnly, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id < 1) return res.status(400).json({ message: "ID không hợp lệ" });
+  const user = await prisma.user.findUnique({ where: { id }, include: userInclude });
+  if (!user) return res.status(404).json({ message: "Không tìm thấy người dùng" });
+  const { passwordHash, ...safe } = user;
+  res.json(safe);
 });
 
 adminRouter.post("/users", adminOnly, async (req, res) => {
@@ -1036,9 +1068,45 @@ adminRouter.patch("/trips/:id/settlement", async (req, res) => {
   res.json(trip);
 });
 
-adminRouter.get("/posts", async (_req, res) => {
-  const posts = await prisma.post.findMany({ include: { category: true }, orderBy: { updatedAt: "desc" } });
-  res.json(posts);
+adminRouter.get("/posts", async (req, res) => {
+  const where: any = {};
+  if (req.query.status) where.status = String(req.query.status);
+  const categoryId = toNumberOrUndefined(req.query.categoryId);
+  if (categoryId) where.categoryId = categoryId;
+  const q = String(req.query.q || "").trim();
+  if (q) {
+    where.OR = [
+      { title: { contains: q } },
+      { slug: { contains: q } },
+      { excerpt: { contains: q } },
+    ];
+  }
+  const { page, limit, skip } = parsePageQuery(req.query as Record<string, unknown>, { limit: 15 });
+  const [total, posts] = await Promise.all([
+    prisma.post.count({ where }),
+    prisma.post.findMany({
+      where,
+      include: { category: true },
+      orderBy: { updatedAt: "desc" },
+      skip,
+      take: limit,
+    }),
+  ]);
+  res.json({
+    items: posts,
+    page,
+    pageSize: limit,
+    total,
+    totalPages: Math.max(1, Math.ceil(total / limit)),
+  });
+});
+
+adminRouter.get("/posts/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id < 1) return res.status(400).json({ message: "ID bài viết không hợp lệ" });
+  const post = await prisma.post.findUnique({ where: { id }, include: { category: true } });
+  if (!post) return res.status(404).json({ message: "Không tìm thấy bài viết" });
+  res.json(post);
 });
 
 adminRouter.post("/posts", async (req, res) => {
@@ -1068,8 +1136,34 @@ adminRouter.patch("/posts/:id", async (req, res) => {
   res.json(post);
 });
 
-adminRouter.get("/media", async (_req, res) => {
-  res.json(await prisma.mediaFile.findMany({ orderBy: { createdAt: "desc" }, take: 200 }));
+adminRouter.get("/media", async (req, res) => {
+  const where: any = {};
+  if (req.query.usageType) where.usageType = String(req.query.usageType);
+  const q = String(req.query.q || "").trim();
+  if (q) {
+    where.OR = [
+      { title: { contains: q } },
+      { altText: { contains: q } },
+      { fileName: { contains: q } },
+    ];
+  }
+  const { page, limit, skip } = parsePageQuery(req.query as Record<string, unknown>, { limit: 18 });
+  const [total, items] = await Promise.all([
+    prisma.mediaFile.count({ where }),
+    prisma.mediaFile.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: limit,
+    }),
+  ]);
+  res.json({
+    items,
+    page,
+    pageSize: limit,
+    total,
+    totalPages: Math.max(1, Math.ceil(total / limit)),
+  });
 });
 
 adminRouter.get("/post-categories", async (_req, res) => {

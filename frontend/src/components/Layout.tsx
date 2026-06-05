@@ -1,29 +1,18 @@
 /**
  * Layout công khai + sidebar dashboard.
  *
- * Menu accordion (mobile tiết kiệm chỗ, một nhóm mở/lần):
- * - PublicMobileNav: Hành khách / Hàng hóa / Khác / Tài khoản.
- * - SidebarNav + collapseGroups: admin Vận hành / Tài chính / Hệ thống.
- * - Desktop admin: tự mở nhóm có route active.
- *
- * Chi tiết: frontend/GHI_CHU_LOGIC.md
+ * Menu public: 5 mục phẳng (Trang chủ, Đặt xe, Gửi hàng, Đi chợ quê, Kinh nghiệm).
+ * Hotline/Zalo/logo lấy từ GET /api/settings (useSiteSettings).
  */
 import { useCallback, useEffect, useState } from "react";
-import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import { ChevronDown, LogOut, Menu, MessageCircle, Phone, UserCircle, UserPlus, X } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
-import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { getContactInfo, useSiteSettings } from "../lib/useSiteSettings";
-import { ContactQuickBlock } from "./ContactQuickBlock";
-import { cargoNavServices, passengerNavServices } from "../routes/bookableServices";
+import { getBrandAssets, getContactInfo, useSiteSettings } from "../lib/useSiteSettings";
+import { publicNavLinks } from "../routes/publicNav";
 import { accountPath, dashboardPath } from "../lib/accountPath";
-
-const publicLinks = [
-  { to: "/tra-cuu-don", label: "Tra cứu" },
-  { to: "/lien-he", label: "Liên hệ" },
-  { to: "/kinh-nghiem", label: "Kinh nghiệm" },
-];
+import { SEOHead } from "./SEOHead";
 
 function navClass(isActive: boolean) {
   return `block rounded-xl px-3 py-2 text-sm font-semibold ${isActive ? "bg-brand-700 text-white" : "text-slate-600 hover:bg-slate-100"}`;
@@ -144,155 +133,31 @@ function useAccordionSection(initial: string | null = null) {
   return { toggle, openOnly, isOpen };
 }
 
-function NavMenuDropdown({
-  label,
-  items,
-  onNavigate,
-}: {
-  label: string;
-  items: readonly { path: string; menuLabel: string }[];
-  onNavigate?: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="relative" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
-      <button
-        type="button"
-        className="inline-flex items-center gap-1 font-semibold text-slate-700 hover:text-brand-700"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        aria-haspopup="true"
-      >
-        {label} <ChevronDown size={16} className={`transition ${open ? "rotate-180" : ""}`} />
-      </button>
-      {open && (
-        <div className="absolute left-0 top-full z-50 pt-1">
-          <div className="min-w-[11rem] rounded-2xl border border-slate-200 bg-white py-2 shadow-soft">
-            {items.map((s) => (
-              <Link
-                key={s.path}
-                to={s.path}
-                className="block px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                onClick={() => {
-                  setOpen(false);
-                  onNavigate?.();
-                }}
-              >
-                {s.menuLabel}
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function PublicMobileNav({
-  user,
-  onClose,
-  onLogout,
-}: {
-  user: ReturnType<typeof useAuth>["user"];
-  onClose: () => void;
-  onLogout: () => void;
-}) {
-  const accordion = useAccordionSection(null);
-
+function PublicMobileNav({ onClose }: { onClose: () => void }) {
   return (
     <nav className="border-t border-slate-100 px-2 py-2 md:hidden">
-      <CollapsibleSection
-        title="Hành khách"
-        open={accordion.isOpen("passenger")}
-        onToggle={() => accordion.toggle("passenger")}
-      >
-        {passengerNavServices.map((s) => (
-          <Link
-            key={s.path}
-            to={s.path}
-            className="block rounded-xl px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            onClick={onClose}
-          >
-            {s.menuLabel}
-          </Link>
-        ))}
-      </CollapsibleSection>
-      <CollapsibleSection
-        title="Hàng hóa"
-        open={accordion.isOpen("cargo")}
-        onToggle={() => accordion.toggle("cargo")}
-      >
-        {cargoNavServices.map((s) => (
-          <Link
-            key={s.path}
-            to={s.path}
-            className="block rounded-xl px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            onClick={onClose}
-          >
-            {s.menuLabel}
-          </Link>
-        ))}
-      </CollapsibleSection>
-      <CollapsibleSection title="Khác" open={accordion.isOpen("other")} onToggle={() => accordion.toggle("other")}>
-        {publicLinks.map((l) => (
-          <Link
-            key={l.to}
-            to={l.to}
-            className="block rounded-xl px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            onClick={onClose}
-          >
-            {l.label}
-          </Link>
-        ))}
-      </CollapsibleSection>
-      <CollapsibleSection title="Tài khoản" open={accordion.isOpen("account")} onToggle={() => accordion.toggle("account")}>
-        {user ? (
-          <>
-            <Link
-              to={dashboardPath(user.role)}
-              className="block rounded-xl px-3 py-2 text-sm font-semibold text-brand-700 hover:bg-slate-50"
-              onClick={onClose}
-            >
-              Trang quản lý
-            </Link>
-            <Link
-              to={accountPath(user.role)}
-              className="block rounded-xl px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              onClick={onClose}
-            >
-              Thông tin tài khoản
-            </Link>
-            <button
-              type="button"
-              className="block w-full rounded-xl px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-50"
-              onClick={() => {
-                onClose();
-                onLogout();
-              }}
-            >
-              Đăng xuất
-            </button>
-          </>
-        ) : (
-          <>
-            <Link to="/dang-nhap" className="block rounded-xl px-3 py-2 text-sm font-medium hover:bg-slate-50" onClick={onClose}>
-              Đăng nhập
-            </Link>
-            <Link to="/dang-ky?loai=khach" className="block rounded-xl px-3 py-2 text-sm font-semibold text-cta hover:bg-slate-50" onClick={onClose}>
-              Đăng ký
-            </Link>
-          </>
-        )}
-      </CollapsibleSection>
+      {publicNavLinks.map((l) => (
+        <NavLink
+          key={l.to}
+          to={l.to}
+          end={"end" in l ? l.end : false}
+          className={({ isActive }) =>
+            `block rounded-xl px-3 py-2.5 text-sm font-semibold ${isActive ? "bg-brand-700 text-white" : "text-slate-700 hover:bg-slate-50"}`
+          }
+          onClick={onClose}
+        >
+          {l.label}
+        </NavLink>
+      ))}
     </nav>
   );
 }
 
 export function PublicLayout({ children }: { children: React.ReactNode }) {
-  const { user, reload } = useAuth();
+  const { user } = useAuth();
   const { settings, loading: settingsLoading } = useSiteSettings();
   const contact = getContactInfo(settings);
-  const navigate = useNavigate();
+  const brand = getBrandAssets(settings);
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -300,28 +165,21 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
     setMobileOpen(false);
   }, [location.pathname]);
 
-  const logout = async () => {
-    await api.post("/auth/logout");
-    await reload();
-    navigate("/");
-  };
-
   return (
     <div className="min-h-screen pb-20 md:pb-0">
       <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
-          <Link to="/" className="flex items-center gap-3" aria-label="Đặt Xe Về Quê">
-            <img src="/brand/icon-dat-xe-ve-que.webp" alt="Đặt Xe Về Quê" className="h-11 w-11 rounded-2xl object-contain md:hidden" />
-            <img src="/brand/logo-dat-xe-ve-que-header.webp" alt="Đặt Xe Về Quê" className="hidden h-12 w-auto object-contain md:block" />
+          <Link to="/" className="flex items-center gap-3" aria-label={brand.brandName}>
+            <img src={brand.iconUrl} alt={brand.brandName} className="h-11 w-11 rounded-2xl object-contain md:hidden" />
+            <img src={brand.logoUrl} alt={brand.brandName} className="hidden h-12 w-auto object-contain md:block" />
           </Link>
 
           <nav className="hidden items-center gap-5 text-sm md:flex">
-            <NavMenuDropdown label="Hành khách" items={passengerNavServices} />
-            <NavMenuDropdown label="Hàng hóa" items={cargoNavServices} />
-            {publicLinks.map((l) => (
+            {publicNavLinks.map((l) => (
               <NavLink
                 key={l.to}
                 to={l.to}
+                end={"end" in l ? l.end : false}
                 className={({ isActive }) => `font-semibold ${isActive ? "text-brand-700" : "text-slate-700 hover:text-brand-700"}`}
               >
                 {l.label}
@@ -329,32 +187,32 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
             ))}
           </nav>
 
-          <div className="hidden items-center gap-2 md:flex">
+          <div className="flex items-center gap-2">
             {user ? (
               <AccountUserMenu variant="public" />
             ) : (
-              <>
+              <div className="hidden items-center gap-2 md:flex">
                 <Link to="/dang-nhap" className="rounded-2xl px-4 py-2 font-semibold text-slate-700 hover:bg-slate-100">
                   Đăng nhập
                 </Link>
                 <Link to="/dang-ky?loai=khach" className="btn-primary py-2">
                   <UserPlus size={18} /> Đăng ký
                 </Link>
-              </>
+              </div>
             )}
+            <button
+              type="button"
+              className="rounded-xl p-2 text-slate-600 hover:bg-slate-100 md:hidden"
+              onClick={() => setMobileOpen((v) => !v)}
+              aria-label="Menu"
+              aria-expanded={mobileOpen}
+            >
+              {mobileOpen ? <X size={24} /> : <Menu size={24} />}
+            </button>
           </div>
-
-          <button
-            type="button"
-            className="rounded-xl p-2 text-slate-600 hover:bg-slate-100 md:hidden"
-            onClick={() => setMobileOpen((v) => !v)}
-            aria-label="Menu"
-          >
-            {mobileOpen ? <X size={24} /> : <Menu size={24} />}
-          </button>
         </div>
 
-        {mobileOpen && <PublicMobileNav user={user} onClose={() => setMobileOpen(false)} onLogout={logout} />}
+        {mobileOpen && <PublicMobileNav onClose={() => setMobileOpen(false)} />}
       </header>
 
       <main>{children}</main>
@@ -362,8 +220,10 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
       <footer className="mt-16 border-t border-slate-200 bg-white px-4 py-10">
         <div className="mx-auto grid max-w-7xl gap-6 md:grid-cols-3">
           <div>
-            <img src="/brand/logo-dat-xe-ve-que-header.webp" alt="Đặt Xe Về Quê" className="h-12 w-auto object-contain" />
-            <p className="mt-2 text-sm text-slate-600">Xe ghép, bao xe, gửi hàng, đi chợ quê, xe hợp đồng.</p>
+            <img src={brand.logoUrl} alt={brand.brandName} className="h-12 w-auto object-contain" />
+            <p className="mt-2 text-sm text-slate-600">
+              {settings.slogan?.trim() || "Xe ghép, bao xe, gửi hàng, đi chợ quê, xe hợp đồng."}
+            </p>
           </div>
           <div>
             <b>Liên hệ</b>
@@ -429,7 +289,7 @@ const adminNav: { title: string; items: NavItem[] }[] = [
   {
     title: "Hệ thống",
     items: [
-      { href: "/noi-dung", label: "Nội dung web", match: ["/noi-dung", "/bai-viet", "/media"] },
+      { href: "/noi-dung", label: "Nội dung web", match: ["/noi-dung", "/noi-dung/bai-viet", "/noi-dung/media"] },
       { href: "/users", label: "Người dùng" },
       { href: "/cai-dat", label: "Cài đặt" },
     ],
@@ -533,6 +393,12 @@ export function DashboardLayout({ children, type }: { children: React.ReactNode;
 
   return (
     <div className="min-h-screen app-shell-bg">
+      <SEOHead
+        title={`${title} | Đặt Xe Về Quê`}
+        description="Khu vực quản trị/vận hành nội bộ."
+        canonicalPath={location.pathname}
+        noIndex
+      />
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r border-slate-200 bg-white/95 p-4 shadow-card backdrop-blur md:flex">
         <Link to="/" className="mb-5 flex shrink-0 items-center gap-2 font-bold text-brand-800">
           <img src="/brand/icon-dat-xe-ve-que.webp" alt="Đặt Xe Về Quê" className="h-9 w-9 rounded-xl object-contain" />

@@ -7,6 +7,8 @@ export default defineConfig({
     host: true,
     proxy: {
       "/api": { target: "http://127.0.0.1:4002", changeOrigin: true },
+      "/sitemap.xml": { target: "http://127.0.0.1:4002", changeOrigin: true },
+      "/robots.txt": { target: "http://127.0.0.1:4002", changeOrigin: true },
     },
   },
 });

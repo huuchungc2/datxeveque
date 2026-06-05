@@ -7,8 +7,8 @@ alwaysApply: false
 # Điều phối
 
 - UI: `AdminDispatch.tsx`, route `/admin/dispatch` (3 cột + gợi ý).
-- **Ghi chú logic (đọc trước khi sửa):** `DISPATCH_GHI_CHU_LOGIC.md`, `DISPATCH_SETTLEMENT_LOGIC.md`, `frontend/GHI_CHU_LOGIC.md` § Admin điều phối.
+- **Doc chuẩn (đọc trước khi sửa):** `DOCS_DISPATCH_SETTLEMENT.md` (dispatch/seat_count/settlement) + `DOCS_CORE_FLOWS.md` (API/core).
 - **Gán ghế từng phần:** một đơn nhiều ghế → nhiều chuyến; `trip_bookings.seat_count`; mỗi lần `min(remaining, trip.availableSeats)`; đơn còn ghế → `WAITING_DISPATCH` + vẫn trong cột ①.
 - API: `GET /admin/dispatch`, `POST /admin/dispatch/apply` (+ `seatCounts`), `POST /admin/trips/:id/add-bookings` (+ `seatCounts`), `PATCH /admin/trips/:id`.
 - UI chọn đơn: hiện mọi chuyến/tài còn ≥1 ghế (không lọc “đủ hết ghế đơn”).
-- Spec sản phẩm gốc: `04_DISPATCH_FLOW_SPEC.md` (có thể lệch code — ưu tiên `DISPATCH_GHI_CHU_LOGIC.md`).
+- Spec/contract được gom: ưu tiên `DOCS_DISPATCH_SETTLEMENT.md` nếu có lệch giữa code và doc cũ.

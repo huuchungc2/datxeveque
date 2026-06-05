@@ -17,6 +17,7 @@
     "db:reset-minimal": "node scripts/seed-vps-demo.mjs --trim",
     "db:fix-encoding": "node scripts/fix-encoding.mjs",
     "db:seed-pricing": "node scripts/seed-pricing-test.mjs",
+    "db:seed-experience": "node scripts/seed-experience-posts.mjs",
     "prisma:startup": "node scripts/prisma-startup.mjs",
     "prisma:generate": "prisma generate",
     "prisma:deploy": "prisma migrate deploy",

@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import { Helmet } from "react-helmet-async";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Car, LockKeyhole, ShieldCheck, UserPlus } from "lucide-react";
 import { api, API_BASE } from "../lib/api";
 import { normalizeVnPhone, PHONE_INVALID_MESSAGE, phoneInputProps, sanitizePhoneInput } from "../lib/phone";
 import { useAuth } from "../lib/auth";
 import { dashboardPath } from "../lib/accountPath";
+import { SEOHead } from "../components/SEOHead";
 
 function redirectByRole(role: string) {
   return dashboardPath(role);
@@ -76,7 +76,7 @@ export function LoginPage() {
   };
   return (
     <AuthShell title="Đăng nhập hệ thống" subtitle="Dành cho quản trị, điều phối, tài xế và khách hàng đã có tài khoản.">
-      <Helmet><title>Đăng nhập | Đặt Xe Về Quê</title></Helmet>
+      <SEOHead title="Đăng nhập | Đặt Xe Về Quê" description="Trang đăng nhập hệ thống quản trị, điều phối, tài xế và khách hàng." canonicalPath="/dang-nhap" noIndex />
       <form onSubmit={submit} className="panel">
         <div className="grid h-12 w-12 place-items-center rounded-2xl bg-brand-50 text-brand-700"><LockKeyhole /></div>
         <h1 className="mt-4 text-2xl font-extrabold">Đăng nhập</h1>
@@ -119,7 +119,7 @@ export function RegisterPage(){
   };
   return (
     <AuthShell title="Tạo tài khoản" subtitle="Khách hàng theo dõi đơn đã đặt; tài xế nhận chuyến, báo rảnh và xem công nợ.">
-      <Helmet><title>Đăng ký | Đặt Xe Về Quê</title></Helmet>
+      <SEOHead title="Đăng ký | Đặt Xe Về Quê" description="Trang đăng ký tài khoản khách hàng hoặc tài xế." canonicalPath="/dang-ky" noIndex />
       <form className="panel" onSubmit={submit}>
         <div className="grid h-12 w-12 place-items-center rounded-2xl bg-orange-50 text-orange-600"><UserPlus /></div>
         <h1 className="mt-4 text-2xl font-extrabold text-slate-900">Đăng ký tài khoản</h1>
@@ -146,9 +146,9 @@ export function RegisterPage(){
 export function ForgotPasswordPage(){
   const [phone,setPhone]=useState(""); const [msg,setMsg]=useState<any>(null);
   const submit=async(e:React.FormEvent)=>{ e.preventDefault(); try{ const res=await api.post("/auth/forgot-password",{phone}); setMsg(res.data); }catch(err:any){ setMsg({message: err.response?.data?.message || "Tính năng quên mật khẩu đang được bảo trì. Vui lòng liên hệ quản trị viên."}); } };
-  return <AuthShell title="Hỗ trợ mật khẩu" subtitle="Vì bảo mật, hệ thống không tự đổi mật khẩu chỉ bằng số điện thoại."><form className="panel" onSubmit={submit}><h1 className="text-2xl font-extrabold">Quên mật khẩu</h1><p className="mt-2 text-sm leading-6 text-slate-600">Gửi số điện thoại để quản trị viên hỗ trợ. Endpoint public reset password đã được khóa theo hướng an toàn.</p><input className="input mt-5" placeholder="Số điện thoại" value={phone} onChange={e=>setPhone(e.target.value)}/><button className="btn-primary mt-4 w-full">Gửi yêu cầu hỗ trợ</button>{msg&&<div className="mt-4 rounded-2xl bg-blue-50 p-3 text-sm text-blue-700">{msg.message}</div>}</form></AuthShell>;
+  return <AuthShell title="Hỗ trợ mật khẩu" subtitle="Vì bảo mật, hệ thống không tự đổi mật khẩu chỉ bằng số điện thoại."><SEOHead title="Quên mật khẩu | Đặt Xe Về Quê" description="Trang hỗ trợ mật khẩu. Tính năng đặt lại mật khẩu công khai được tắt để đảm bảo an toàn." canonicalPath="/quen-mat-khau" noIndex /><form className="panel" onSubmit={submit}><h1 className="text-2xl font-extrabold">Quên mật khẩu</h1><p className="mt-2 text-sm leading-6 text-slate-600">Gửi số điện thoại để quản trị viên hỗ trợ. Endpoint public reset password đã được khóa theo hướng an toàn.</p><input className="input mt-5" placeholder="Số điện thoại" value={phone} onChange={e=>setPhone(e.target.value)}/><button className="btn-primary mt-4 w-full">Gửi yêu cầu hỗ trợ</button>{msg&&<div className="mt-4 rounded-2xl bg-blue-50 p-3 text-sm text-blue-700">{msg.message}</div>}</form></AuthShell>;
 }
 
 export function ResetPasswordPage(){
-  return <AuthShell title="Đặt lại mật khẩu" subtitle="Tính năng đặt lại mật khẩu công khai đã tắt để tránh rủi ro bảo mật."><div className="panel"><h1 className="text-2xl font-extrabold">Đặt lại mật khẩu</h1><p className="mt-3 text-slate-600">Vui lòng liên hệ quản trị viên để được hỗ trợ reset mật khẩu an toàn.</p><Link className="btn-primary mt-5 inline-flex" to="/dang-nhap">Quay lại đăng nhập</Link></div></AuthShell>;
+  return <AuthShell title="Đặt lại mật khẩu" subtitle="Tính năng đặt lại mật khẩu công khai đã tắt để tránh rủi ro bảo mật."><SEOHead title="Đặt lại mật khẩu | Đặt Xe Về Quê" description="Trang đặt lại mật khẩu công khai đã tắt để tránh rủi ro bảo mật." canonicalPath="/dat-lai-mat-khau" noIndex /><div className="panel"><h1 className="text-2xl font-extrabold">Đặt lại mật khẩu</h1><p className="mt-3 text-slate-600">Vui lòng liên hệ quản trị viên để được hỗ trợ reset mật khẩu an toàn.</p><Link className="btn-primary mt-5 inline-flex" to="/dang-nhap">Quay lại đăng nhập</Link></div></AuthShell>;
 }
