@@ -4,6 +4,7 @@ import { CalendarClock, MapPinned, MessageCircle, Phone, Ticket, User } from "lu
 import { getContactInfo, useSiteSettings } from "../lib/useSiteSettings";
 import { api, formatMoney } from "../lib/api";
 import { formatDisplayDateTime } from "../lib/datetime";
+import { trackEvent } from "../lib/analytics";
 import { ContactQuickBlock } from "./ContactQuickBlock";
 import { customerBookingStatus, customerBookingTypeLabel } from "../lib/vi";
 import { usesPassengerCount } from "../lib/bookingSeats";
@@ -245,7 +246,11 @@ export function BookingSuccessActions({
         <>
           <p className="text-sm text-slate-600">{contact.footerLine}</p>
           <div className="flex flex-wrap gap-2 justify-center">
-            <a className="btn-secondary flex-1 min-w-[140px] justify-center py-2.5 text-sm" href={`tel:${contact.hotline}`}>
+            <a
+              className="btn-secondary flex-1 min-w-[140px] justify-center py-2.5 text-sm"
+              href={`tel:${contact.hotline}`}
+              onClick={() => trackEvent("click_call")}
+            >
               <Phone size={16} /> Gọi hotline
             </a>
             <a
@@ -253,6 +258,7 @@ export function BookingSuccessActions({
               href={contact.zaloUrl}
               target="_blank"
               rel="noreferrer"
+              onClick={() => trackEvent("click_zalo")}
             >
               <MessageCircle size={16} /> Nhắn Zalo
             </a>

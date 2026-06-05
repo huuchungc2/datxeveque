@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { ArrowRight, Car, MapPin, MessageCircle, Phone, ShieldCheck } from "lucide-react";
+import { trackEvent } from "../lib/analytics";
 import { api, unwrapList } from "../lib/api";
 import { SEOHead } from "../components/SEOHead";
 import { EmptyState } from "../components/ui/DesignKit";
@@ -41,6 +42,14 @@ export default function RouteSeoPage({ slug: slugProp }: { slug?: string }) {
       })
       .catch(() => setApiRouteId(null));
   }, [entry]);
+
+  useEffect(() => {
+    if (!entry) return;
+    trackEvent("view_route_page", {
+      page_path: location.pathname,
+      route_slug: entry.slug,
+    });
+  }, [entry, location.pathname]);
 
   const relatedLinks = useMemo(
     () => (entry ? filterExistingLinks(entry.relatedLinks) : []),
@@ -91,6 +100,9 @@ export default function RouteSeoPage({ slug: slugProp }: { slug?: string }) {
                 <a
                   href={`tel:${contact.hotline}`}
                   className="inline-flex h-12 items-center gap-2 rounded-xl border border-slate-600 bg-slate-900/50 px-6 text-sm font-bold hover:bg-slate-800"
+                  onClick={() =>
+                    trackEvent("click_call", { source: "route_page", route_slug: entry.slug })
+                  }
                 >
                   <Phone size={16} className="text-brand-400" /> Gọi hotline
                 </a>
@@ -99,6 +111,9 @@ export default function RouteSeoPage({ slug: slugProp }: { slug?: string }) {
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex h-12 items-center gap-2 rounded-xl border border-slate-600 bg-slate-900/50 px-6 text-sm font-bold hover:bg-slate-800"
+                  onClick={() =>
+                    trackEvent("click_zalo", { source: "route_page", route_slug: entry.slug })
+                  }
                 >
                   <MessageCircle size={16} className="text-brand-400" /> Zalo
                 </a>
@@ -203,10 +218,24 @@ export default function RouteSeoPage({ slug: slugProp }: { slug?: string }) {
             </Link>
             {contact.ready && (
               <>
-                <a className="btn-secondary py-2.5" href={`tel:${contact.hotline}`}>
+                <a
+                  className="btn-secondary py-2.5"
+                  href={`tel:${contact.hotline}`}
+                  onClick={() =>
+                    trackEvent("click_call", { source: "route_page", route_slug: entry.slug })
+                  }
+                >
                   <Phone size={16} /> Gọi
                 </a>
-                <a className="btn-secondary py-2.5" href={contact.zaloUrl} target="_blank" rel="noreferrer">
+                <a
+                  className="btn-secondary py-2.5"
+                  href={contact.zaloUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={() =>
+                    trackEvent("click_zalo", { source: "route_page", route_slug: entry.slug })
+                  }
+                >
                   <MessageCircle size={16} /> Zalo
                 </a>
               </>

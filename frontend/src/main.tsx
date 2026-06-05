@@ -1,7 +1,8 @@
 import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { ensureAppTime } from './lib/appTime';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { initGA, trackPageView } from './lib/analytics';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 import './styles/global.css';
 import { AuthProvider } from './lib/auth';
@@ -45,7 +46,18 @@ function AppTimeInit() {
   return null;
 }
 
-function App(){return <HelmetProvider><SiteSettingsProvider><AuthProvider><BrowserRouter><AppTimeInit /><Routes>
+function GaRouteTracker() {
+  const location = useLocation();
+  useEffect(() => {
+    initGA();
+  }, []);
+  useEffect(() => {
+    trackPageView(`${location.pathname}${location.search}`);
+  }, [location.pathname, location.search]);
+  return null;
+}
+
+function App(){return <HelmetProvider><SiteSettingsProvider><AuthProvider><BrowserRouter><AppTimeInit /><GaRouteTracker /><Routes>
 <Route path="/" element={<PublicLayout><HomePage/></PublicLayout>} />
 {coreBookableServices.map((s) => (
   <Route key={s.path} path={s.path} element={<PublicLayout><BookingPage key={s.path} type={s.type} title={s.title}/></PublicLayout>} />

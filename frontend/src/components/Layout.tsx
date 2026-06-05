@@ -12,6 +12,7 @@ import { useAuth } from "../lib/auth";
 import { getBrandAssets, getContactInfo, useSiteSettings } from "../lib/useSiteSettings";
 import { publicNavLinks } from "../routes/publicNav";
 import { accountPath, dashboardPath } from "../lib/accountPath";
+import { trackEvent } from "../lib/analytics";
 import { SEOHead } from "./SEOHead";
 
 function navClass(isActive: boolean) {
@@ -247,10 +248,20 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
       <div className="fixed bottom-0 left-0 right-0 z-50 grid grid-cols-2 gap-2 border-t border-slate-200 bg-white p-2 md:hidden">
         {contact.ready ? (
           <>
-            <a className="btn-secondary py-3" href={`tel:${contact.hotline}`}>
+            <a
+              className="btn-secondary py-3"
+              href={`tel:${contact.hotline}`}
+              onClick={() => trackEvent("click_call", { source: "footer" })}
+            >
               <Phone size={18} /> Gọi
             </a>
-            <a className="btn-secondary py-3" href={contact.zaloUrl} target="_blank" rel="noreferrer">
+            <a
+              className="btn-secondary py-3"
+              href={contact.zaloUrl}
+              target="_blank"
+              rel="noreferrer"
+              onClick={() => trackEvent("click_zalo", { source: "footer" })}
+            >
               <MessageCircle size={18} /> Zalo
             </a>
           </>

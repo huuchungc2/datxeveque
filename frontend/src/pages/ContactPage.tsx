@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { Clock, MapPin, MessageCircle, Phone, Send, HelpCircle } from "lucide-react";
 import { ContactQuickBlock } from "../components/ContactQuickBlock";
+import { trackEvent } from "../lib/analytics";
 import { getContactInfo, useSiteSettings } from "../lib/useSiteSettings";
 import { PublicHero } from "../components/ui/DesignKit";
 import { api } from "../lib/api";
@@ -95,7 +96,11 @@ export default function ContactPage() {
 
             <div className="grid gap-3 sm:grid-cols-2">
               {contact.ready && (
-                <a href={`tel:${contact.hotline}`} className="card flex items-center gap-4 bg-white p-4 transition hover:-translate-y-0.5">
+                <a
+                  href={`tel:${contact.hotline}`}
+                  className="card flex items-center gap-4 bg-white p-4 transition hover:-translate-y-0.5"
+                  onClick={() => trackEvent("click_call")}
+                >
                   <div className="rounded-2xl bg-red-50 p-3 text-red-600 shrink-0">
                     <Phone size={24} />
                   </div>
@@ -112,6 +117,7 @@ export default function ContactPage() {
                   target="_blank"
                   rel="noreferrer"
                   className="card flex items-center gap-4 bg-white p-4 transition hover:-translate-y-0.5"
+                  onClick={() => trackEvent("click_zalo")}
                 >
                   <div className="rounded-2xl bg-blue-50 p-3 text-blue-600 shrink-0">
                     <MessageCircle size={24} />

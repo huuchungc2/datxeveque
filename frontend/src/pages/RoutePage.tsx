@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { HelpCircle, MapPinned, ShieldCheck, Clock, CheckCircle, ArrowRight, PhoneCall, Star } from "lucide-react";
+import { trackEvent } from "../lib/analytics";
 import { api } from "../lib/api";
 import BookingPage from "./BookingPage";
 import { EmptyState } from "../components/ui/DesignKit";
@@ -79,7 +80,16 @@ export default function RoutePage() {
               Đặt vé tuyến này ngay <ArrowRight size={16} />
             </button>
             {contact.ready && (
-              <a href={`tel:${contact.hotline}`} className="h-12 btn-ghost !bg-transparent !border-slate-700 !text-white hover:!bg-slate-800 rounded-xl px-6 text-sm font-bold flex items-center gap-2">
+              <a
+                href={`tel:${contact.hotline}`}
+                className="h-12 btn-ghost !bg-transparent !border-slate-700 !text-white hover:!bg-slate-800 rounded-xl px-6 text-sm font-bold flex items-center gap-2"
+                onClick={() =>
+                  trackEvent("click_call", {
+                    source: "route_page",
+                    route_slug: slug,
+                  })
+                }
+              >
                 <PhoneCall size={16} className="text-brand-400" /> Tổng đài: {contact.hotline}
               </a>
             )}

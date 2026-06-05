@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Calendar, ChevronRight } from "lucide-react";
+import { trackEvent } from "../lib/analytics";
 import { api } from "../lib/api";
 import { EmptyState } from "../components/ui/DesignKit";
 import { SEOHead } from "../components/SEOHead";
@@ -47,6 +48,14 @@ export function PostDetailPage() {
       })
       .catch(() => setRelated([]));
   }, [slug]);
+
+  useEffect(() => {
+    if (!post?.slug) return;
+    trackEvent("view_post", {
+      page_path: `/kinh-nghiem/${post.slug}`,
+      post_slug: post.slug,
+    });
+  }, [post?.slug]);
 
   const cover = useMemo(
     () => (post ? extractPostCover(post.content, post.title) : { url: "", alt: "" }),

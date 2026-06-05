@@ -4,6 +4,7 @@ import {
   ArrowLeft, ArrowRight, CalendarClock, CheckCircle2, MapPin, 
   ReceiptText, Route as RouteIcon, ShieldCheck, Users, Box 
 } from "lucide-react";
+import { trackEvent } from "../lib/analytics";
 import { api, formatMoney, unwrapList } from "../lib/api";
 import {
   formatDisplayDateTime,
@@ -561,6 +562,7 @@ export default function BookingPage({ type: initType, title: propTitle, defaultR
         note: [form.note, form.cargoNote].filter(Boolean).join("\n").trim() || "",
       };
       const res = await api.post("/bookings", payload);
+      trackEvent("submit_booking", { page_path: location.pathname });
       try {
         sessionStorage.removeItem(bookingDraftKey(location.pathname));
       } catch {
