@@ -17,15 +17,8 @@ export type PublicPost = {
 const DEFAULT_COVER = "/images/hero-dat-xe-ve-que-sai-gon-duc-linh.webp";
 const DEFAULT_COVER_ALT = "Đặt xe về quê an toàn, tiện lợi";
 
-/** Typography bài viết — dùng chung detail + preview admin. */
-export const POST_ARTICLE_PROSE_CLASS =
-  "prose prose-slate prose-base md:prose-lg max-w-none " +
-  "prose-headings:font-extrabold prose-headings:text-ink-900 prose-headings:tracking-tight " +
-  "prose-h2:mt-10 prose-h2:mb-3 prose-h2:text-xl md:prose-h2:text-2xl prose-h2:first:mt-0 " +
-  "prose-p:my-4 prose-p:text-slate-600 prose-p:leading-[1.75] " +
-  "prose-a:text-brand-700 prose-a:font-semibold prose-a:no-underline hover:prose-a:underline " +
-  "prose-ul:my-4 prose-li:my-1 prose-img:rounded-xl prose-img:border prose-img:shadow-sm " +
-  "[&_.post-cover]:hidden";
+/** Wrapper nội dung bài viết — dùng chung detail + preview admin. */
+export const POST_ARTICLE_CONTENT_CLASS = "mt-8 border-t border-slate-100 pt-8";
 
 export function extractPostCover(content: string, fallbackAlt?: string) {
   const html = String(content || "");

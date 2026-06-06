@@ -7,14 +7,14 @@ import { EmptyState } from "../components/ui/DesignKit";
 import { SEOHead } from "../components/SEOHead";
 import { PostExperienceCta } from "../components/PostExperienceCta";
 import { getBrandAssets, useSiteSettings } from "../lib/useSiteSettings";
-import { sanitizeHtml } from "../lib/sanitizeHtml";
 import {
   buildArticleJsonLd,
   extractPostCover,
   formatPostDate,
-  POST_ARTICLE_PROSE_CLASS,
+  POST_ARTICLE_CONTENT_CLASS,
   type PublicPost,
 } from "../lib/postArticle";
+import { ArticleContent } from "../lib/renderPlainTextOrMarkdownContent";
 
 export function PostDetailPage() {
   const { slug } = useParams();
@@ -62,11 +62,6 @@ export function PostDetailPage() {
     [post]
   );
 
-  const safeContent = useMemo(
-    () => (post ? sanitizeHtml(post.content) : ""),
-    [post?.content]
-  );
-
   const articleJsonLd = useMemo(
     () => (post ? buildArticleJsonLd(post, cover.url) : undefined),
     [post, cover.url]
@@ -103,7 +98,7 @@ export function PostDetailPage() {
         jsonLd={articleJsonLd}
       />
 
-      <article className="mx-auto max-w-3xl">
+      <article className="mx-auto max-w-3xl px-5 pb-28 md:max-w-[820px]">
         <Link
           to="/kinh-nghiem"
           className="mb-5 inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 transition hover:text-brand-700"
@@ -120,7 +115,7 @@ export function PostDetailPage() {
             loading="eager"
           />
 
-          <div className="px-4 py-7 sm:px-5 sm:py-8 md:px-10 md:py-10">
+          <div className="px-0 py-7 sm:py-8 md:px-5 md:py-10">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500">
               <span className="badge badge-info">{post.category?.name || "Kinh nghiệm"}</span>
               <span className="flex items-center gap-1.5">
@@ -137,10 +132,7 @@ export function PostDetailPage() {
               <p className="mt-4 text-base leading-relaxed text-slate-600 md:text-lg">{post.excerpt}</p>
             )}
 
-            <div
-              className={`${POST_ARTICLE_PROSE_CLASS} mt-8 border-t border-slate-100 pt-8`}
-              dangerouslySetInnerHTML={{ __html: safeContent }}
-            />
+            <ArticleContent content={post.content} className={POST_ARTICLE_CONTENT_CLASS} />
 
             <div className="mt-10 border-t border-slate-100 pt-8">
               <PostExperienceCta compact />

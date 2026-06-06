@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Calendar } from "lucide-react";
-import { extractPostCover, POST_ARTICLE_PROSE_CLASS } from "../../lib/postArticle";
-import { sanitizeHtml } from "../../lib/sanitizeHtml";
+import { extractPostCover, POST_ARTICLE_CONTENT_CLASS } from "../../lib/postArticle";
+import { ArticleContent } from "../../lib/renderPlainTextOrMarkdownContent";
 import { PostExperienceCta } from "../PostExperienceCta";
 
 type Props = {
@@ -15,12 +15,11 @@ type Props = {
 
 export function PostArticlePreview({ title, excerpt, content, categoryName, seoTitle, seoDescription }: Props) {
   const cover = useMemo(() => extractPostCover(content, title), [content, title]);
-  const safeContent = useMemo(() => sanitizeHtml(content), [content]);
   const displayTitle = title.trim() || "Tiêu đề bài viết";
   const hasContent = Boolean(content.trim());
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="mx-auto max-w-3xl px-5 md:max-w-[820px]">
       <p className="mb-4 rounded-xl bg-amber-50 px-4 py-2 text-xs font-semibold text-amber-900">
         Xem trước — layout giống trang public. Thumbnail = <code className="text-[11px]">&lt;img&gt;</code> đầu tiên trong nội dung.
       </p>
@@ -33,10 +32,10 @@ export function PostArticlePreview({ title, excerpt, content, categoryName, seoT
         </div>
       )}
 
-      <div className="-mx-4 overflow-hidden bg-white shadow-card sm:mx-0 sm:rounded-3xl">
+      <div className="-mx-5 overflow-hidden bg-white shadow-card sm:mx-0 sm:rounded-3xl">
         <img src={cover.url} alt={cover.alt} className="aspect-[16/10] w-full object-cover sm:aspect-[2/1] md:aspect-[21/9]" />
 
-        <div className="px-4 py-7 sm:px-5 sm:py-8 md:px-10 md:py-10">
+        <div className="px-0 py-7 sm:py-8 md:px-5 md:py-10">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500">
             <span className="badge badge-info">{categoryName || "Kinh nghiệm"}</span>
             <span className="flex items-center gap-1.5">
@@ -52,12 +51,9 @@ export function PostArticlePreview({ title, excerpt, content, categoryName, seoT
           {excerpt?.trim() && <p className="mt-4 text-base leading-relaxed text-slate-600 md:text-lg">{excerpt}</p>}
 
           {hasContent ? (
-            <div
-              className={`${POST_ARTICLE_PROSE_CLASS} mt-8 border-t border-slate-100 pt-8`}
-              dangerouslySetInnerHTML={{ __html: safeContent }}
-            />
+            <ArticleContent content={content} className={POST_ARTICLE_CONTENT_CLASS} />
           ) : (
-            <p className="mt-8 border-t border-slate-100 pt-8 text-center text-sm text-slate-500">Chưa có nội dung HTML.</p>
+            <p className={`${POST_ARTICLE_CONTENT_CLASS} text-center text-sm text-slate-500`}>Chưa có nội dung.</p>
           )}
 
           <div className="mt-10 border-t border-slate-100 pt-8">
