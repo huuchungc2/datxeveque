@@ -135,6 +135,16 @@ function useAccordionSection(initial: string | null = null) {
 }
 
 function PublicMobileNav({ onClose }: { onClose: () => void }) {
+  const { user, logout } = useAuth();
+
+  const handleLogout = async () => {
+    onClose();
+    await logout();
+  };
+
+  const mobileLinkClass = (isActive: boolean) =>
+    `block rounded-xl px-3 py-2.5 text-sm font-semibold ${isActive ? "bg-brand-700 text-white" : "text-slate-700 hover:bg-slate-50"}`;
+
   return (
     <nav className="border-t border-slate-100 px-2 py-2 md:hidden">
       {publicNavLinks.map((l) => (
@@ -142,14 +152,43 @@ function PublicMobileNav({ onClose }: { onClose: () => void }) {
           key={l.to}
           to={l.to}
           end={"end" in l ? l.end : false}
-          className={({ isActive }) =>
-            `block rounded-xl px-3 py-2.5 text-sm font-semibold ${isActive ? "bg-brand-700 text-white" : "text-slate-700 hover:bg-slate-50"}`
-          }
+          className={({ isActive }) => mobileLinkClass(isActive)}
           onClick={onClose}
         >
           {l.label}
         </NavLink>
       ))}
+      {!user ? (
+        <div className="mt-2 space-y-0.5 border-t border-slate-100 pt-2">
+          <Link to="/dang-nhap" className={mobileLinkClass(false)} onClick={onClose}>
+            Đăng nhập
+          </Link>
+          <Link
+            to="/dang-ky?loai=khach"
+            className="btn-primary mt-1 flex w-full items-center justify-center gap-2 py-2.5"
+            onClick={onClose}
+          >
+            <UserPlus size={18} /> Đăng ký
+          </Link>
+        </div>
+      ) : (
+        <div className="mt-2 space-y-0.5 border-t border-slate-100 pt-2">
+          <Link to={dashboardPath(user.role)} className={mobileLinkClass(false)} onClick={onClose}>
+            Trang quản lý
+          </Link>
+          <Link to={accountPath(user.role)} className={mobileLinkClass(false)} onClick={onClose}>
+            Thông tin tài khoản
+          </Link>
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-red-600 hover:bg-red-50"
+            onClick={handleLogout}
+          >
+            <LogOut size={16} />
+            Đăng xuất
+          </button>
+        </div>
+      )}
     </nav>
   );
 }
@@ -384,7 +423,7 @@ export function DashboardLayout({ children, type }: { children: React.ReactNode;
   const prefix = type === "admin" ? "/admin" : type === "driver" ? "/tai-xe" : "/khach";
   const location = useLocation();
   const [mobileNav, setMobileNav] = useState(false);
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const onAccountPage = location.pathname === prefix + "/tai-khoan";
 
   useEffect(() => {
@@ -439,9 +478,7 @@ export function DashboardLayout({ children, type }: { children: React.ReactNode;
           <b className="text-sm md:hidden">{title}</b>
           <div className="ml-auto flex items-center gap-2">
             {(type === "admin" || type === "driver") && <NotificationBell showOnMobile />}
-            <div className="hidden sm:block">
-              <AccountUserMenu variant="dashboard" />
-            </div>
+            <AccountUserMenu variant="dashboard" />
             <button
               type="button"
               className="rounded-xl p-2 text-slate-600 hover:bg-slate-100 md:hidden"
@@ -458,7 +495,7 @@ export function DashboardLayout({ children, type }: { children: React.ReactNode;
           <div className="max-h-[min(70vh,28rem)] overflow-y-auto border-b bg-white px-2 py-2 md:hidden">
             {renderSidebar(true)}
             {user && (
-              <div className="mt-2 border-t border-slate-100 pt-2">
+              <div className="mt-2 space-y-0.5 border-t border-slate-100 pt-2">
                 <NavLink
                   to={prefix + "/tai-khoan"}
                   className={() => navClass(location.pathname === prefix + "/tai-khoan")}
@@ -466,6 +503,17 @@ export function DashboardLayout({ children, type }: { children: React.ReactNode;
                 >
                   Thông tin tài khoản
                 </NavLink>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold text-red-600 hover:bg-red-50"
+                  onClick={async () => {
+                    setMobileNav(false);
+                    await logout();
+                  }}
+                >
+                  <LogOut size={16} />
+                  Đăng xuất
+                </button>
               </div>
             )}
           </div>
