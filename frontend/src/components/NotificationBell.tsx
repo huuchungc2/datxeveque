@@ -100,7 +100,7 @@ export function NotificationBell({ showOnMobile = true }: { showOnMobile?: boole
       </button>
 
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-[min(22rem,calc(100vw-2rem))] rounded-2xl border border-slate-200 bg-white shadow-lg">
+        <div className="fixed right-4 top-16 z-50 w-[min(22rem,calc(100vw-2rem))] rounded-2xl border border-slate-200 bg-white shadow-lg md:absolute md:right-0 md:top-full md:mt-2">
           <div className="flex items-center justify-between border-b px-3 py-2">
             <span className="text-sm font-semibold text-slate-800">Thông báo</span>
             {unread > 0 && (
