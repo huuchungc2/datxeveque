@@ -1,41 +1,57 @@
 # Hướng dẫn setup GroupFlow Download Button
 
-## Để GroupFlow download button hoạt động, làm theo bước sau:
+## Để nút "Tải GroupFlow" hoạt động, làm theo bước sau:
 
-### 1. Chuẩn bị file GroupFlow.zip
+### 1. Đặt file zip vào folder downloads
 
-- Có file `GroupFlow.zip` (extension của GroupFlow)
-- Hoặc download từ nơi phát hành GroupFlow
-
-### 2. Upload file vào /public
-
-**Đường dẫn:** `frontend/public/groupflow.zip`
+**Đường dẫn chính xác:**
+```
+frontend/public/downloads/groupflow.zip
+```
 
 ```
 frontend/
-  ├── public/
-  │   ├── groupflow.zip  ← Upload file này vào đây
-  │   ├── brand/
-  │   ├── uploads/
-  │   └── ...
+  └── public/
+      └── downloads/
+          ├── .gitkeep
+          └── groupflow.zip   ← BỎ FILE VÀO ĐÂY (tên chữ thường)
 ```
 
-### 3. Xong!
+> ⚠️ **QUAN TRỌNG:** Tên file phải chính xác `groupflow.zip` (chữ thường).
+> VPS chạy Linux phân biệt HOA/thường. Đặt `GroupFlow.zip` hay `Groupflow.zip` sẽ bị lỗi tải.
 
-Button "📥 GroupFlow" sẽ hiển thị ở góc phải màn hình (fixed).
+### 2. Build lại và deploy
 
-- **Desktop**: Hiển thị chữ "GroupFlow"
-- **Mobile**: Chỉ hiển thị icon
+```bash
+cd frontend
+npm run build
+# Vite tự copy public/downloads/ → dist/downloads/
+# Sau đó deploy dist/ lên VPS như bình thường
+```
 
-Click vào → Download `GroupFlow.zip` ngay
+**Hoặc nhanh hơn (khỏi build lại)** — copy trực tiếp lên thư mục dist đang serve trên VPS:
+```bash
+cp GroupFlow.zip /duong-dan-den/frontend/dist/downloads/groupflow.zip
+```
 
-### 4. Analytics
+### 3. Kiểm tra
 
-Click download được track ở event: `click_groupflow_download` (source: "floating_button")
+Mở trực tiếp trên browser: `https://datxeveque.vn/downloads/groupflow.zip`
+
+- ✅ Nếu **tải về file zip** → OK
+- ❌ Nếu **hiện ra trang web** → file chưa đúng chỗ hoặc sai tên
 
 ---
 
-## File được tạo:
+## Muốn thêm tool khác sau này?
 
-- `frontend/src/components/GroupFlowDownloadButton.tsx` - Component floating button
-- Button đã được thêm vào `Layout.tsx` - hiển thị ở tất cả trang public
+Cứ bỏ file vào `frontend/public/downloads/` rồi tạo nút tải trỏ tới
+`/downloads/ten-file.zip` là xong.
+
+---
+
+## File liên quan
+
+- `frontend/src/components/GroupFlowDownloadButton.tsx` — nút floating, tải từ `/downloads/groupflow.zip`
+- Nút đã gắn sẵn trong `Layout.tsx` — hiển thị ở mọi trang public
+- Analytics: click được track ở event `click_groupflow_download`

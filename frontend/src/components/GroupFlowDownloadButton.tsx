@@ -5,7 +5,7 @@ export function GroupFlowDownloadButton() {
   const handleDownload = () => {
     trackEvent("click_groupflow_download", { source: "floating_button" });
     const link = document.createElement("a");
-    link.href = "/groupflow.zip";
+    link.href = "/downloads/groupflow.zip";
     link.download = "GroupFlow.zip";
     document.body.appendChild(link);
     link.click();
