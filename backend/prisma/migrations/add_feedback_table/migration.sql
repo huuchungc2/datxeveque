@@ -1,12 +1,3 @@
--- Create FeedbackCategory enum type
-CREATE TYPE `FeedbackCategory` ENUM(
-  'RATING',
-  'COMPLAINT_DRIVER',
-  'SUGGESTION',
-  'BUG_REPORT',
-  'OTHER'
-) NOT NULL;
-
 -- Create feedbacks table
 CREATE TABLE `feedbacks` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
