@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { ChevronDown, LogOut, Menu, MessageCircle, Phone, UserCircle, UserPlus, X } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
+import { GroupFlowDownloadButton } from "./GroupFlowDownloadButton";
 import { useAuth } from "../lib/auth";
 import { getBrandAssets, getContactInfo, useSiteSettings } from "../lib/useSiteSettings";
 import { publicNavLinks } from "../routes/publicNav";
@@ -228,6 +229,18 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
           </nav>
 
           <div className="flex items-center gap-2">
+            {contact.ready && (
+              <a
+                href={`tel:${contact.hotline}`}
+                className="flex items-center gap-1.5 rounded-2xl border border-brand-200 bg-brand-50 px-2.5 py-2 text-brand-700 hover:bg-brand-100 md:px-3.5 md:text-sm md:font-semibold"
+                aria-label={`Gọi ${contact.hotline}`}
+                onClick={() => trackEvent("click_call", { source: "header" })}
+                title={`Gọi ${contact.hotline}`}
+              >
+                <Phone size={18} className="shrink-0" />
+                <span className="hidden text-sm font-semibold md:inline">{contact.hotline}</span>
+              </a>
+            )}
             {user ? (
               <AccountUserMenu variant="public" />
             ) : (
@@ -256,6 +269,8 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
       </header>
 
       <main>{children}</main>
+
+      <GroupFlowDownloadButton />
 
       <footer className="mt-16 border-t border-slate-200 bg-white px-4 py-10">
         <div className="mx-auto grid max-w-7xl gap-6 md:grid-cols-3">

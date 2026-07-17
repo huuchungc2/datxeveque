@@ -13,6 +13,7 @@ import {
 } from "../lib/bookingCustomerRequest.js";
 import { getAppTimePayload } from "../lib/datetime.js";
 import { publicRouteWhere } from "../lib/routes.js";
+import { sendTelegramMessage } from "../lib/telegramNotify.js";
 
 export const publicRouter = Router();
 
@@ -194,5 +195,54 @@ publicRouter.get("/posts/:slug", async (req, res) => {
   } catch (error) {
     console.error("GET /posts/:slug error:", error);
     res.status(500).json({ message: "Không tải được bài viết" });
+  }
+});
+
+publicRouter.post("/feedback", async (req, res) => {
+  try {
+    const { category, name, phone, email, content, bookingId, routeId } = req.body;
+
+    if (!category || !name || !phone || !content) {
+      return res.status(400).json({ message: "Thiếu thông tin bắt buộc" });
+    }
+
+    const feedback = await prisma.feedback.create({
+      data: {
+        category,
+        name: String(name).trim(),
+        phone: String(phone).trim(),
+        email: email ? String(email).trim() : null,
+        content: String(content).trim(),
+        bookingId: bookingId ? Number(bookingId) : null,
+        routeId: routeId ? Number(routeId) : null,
+      },
+    });
+
+    const telegram = await (async () => {
+      try {
+        const lines = [
+          `📝 Phản hồi mới từ khách hàng`,
+          `Loại: ${category === "RATING" ? "Đánh giá" : category === "COMPLAINT_DRIVER" ? "Phàn nàn tài xế" : category === "SUGGESTION" ? "Góp ý" : category === "BUG_REPORT" ? "Báo lỗi" : "Khác"}`,
+          `Từ: ${name}`,
+          `SĐT: ${phone}`,
+          email ? `Email: ${email}` : null,
+          bookingId ? `Booking #${bookingId}` : null,
+          `Nội dung: ${content.slice(0, 200)}${content.length > 200 ? "..." : ""}`,
+          `Thời gian: ${new Date().toLocaleString("vi-VN")}`,
+        ]
+          .filter(Boolean)
+          .join("\n");
+        await sendTelegramMessage(lines);
+        return true;
+      } catch (e) {
+        console.warn("[telegram] Không gửi được feedback notification:", e);
+        return false;
+      }
+    })();
+
+    res.json({ feedback, telegramSent: telegram });
+  } catch (error: any) {
+    console.error("POST /feedback error:", error);
+    res.status(500).json({ message: "Không gửi được phản hồi. Vui lòng thử lại sau." });
   }
 });

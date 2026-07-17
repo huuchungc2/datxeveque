@@ -1207,3 +1207,68 @@ adminRouter.post("/media/upload", upload.single("file"), async (req, res) => {
   const media = await prisma.mediaFile.create({ data: { originalName: req.file.originalname, fileName, fileUrl, mimeType: "image/webp", sizeBytes: req.file.size, altText, title, usageType } });
   res.json(media);
 });
+
+adminRouter.get("/feedbacks", async (req, res) => {
+  try {
+    const where: any = {};
+    if (req.query.category) where.category = req.query.category;
+    if (req.query.resolved !== undefined) where.resolved = req.query.resolved === "true";
+    const keyword = String(req.query.q || req.query.keyword || "").trim();
+    if (keyword) {
+      where.OR = [{ name: { contains: keyword } }, { phone: { contains: keyword } }, { content: { contains: keyword } }, { email: { contains: keyword } }];
+    }
+    const { page, limit, skip } = parsePageQuery(req.query as Record<string, unknown>);
+    const [total, items] = await Promise.all([
+      prisma.feedback.count({ where }),
+      prisma.feedback.findMany({
+        where,
+        include: { booking: { select: { id: true, code: true, customerName: true } }, route: { select: { id: true, name: true } } },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+      }),
+    ]);
+    res.json({
+      items,
+      page,
+      pageSize: limit,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    });
+  } catch (error) {
+    console.error("GET /admin/feedbacks error:", error);
+    res.status(500).json({ message: "Không tải được danh sách phản hồi" });
+  }
+});
+
+adminRouter.get("/feedbacks/:id", async (req, res) => {
+  try {
+    const feedback = await prisma.feedback.findUnique({
+      where: { id: Number(req.params.id) },
+      include: { booking: true, route: true },
+    });
+    if (!feedback) return res.status(404).json({ message: "Không tìm thấy phản hồi" });
+    res.json(feedback);
+  } catch (error) {
+    console.error("GET /admin/feedbacks/:id error:", error);
+    res.status(500).json({ message: "Không tải được chi tiết phản hồi" });
+  }
+});
+
+adminRouter.patch("/feedbacks/:id", async (req, res) => {
+  try {
+    const { resolved, adminNote } = req.body;
+    const feedback = await prisma.feedback.update({
+      where: { id: Number(req.params.id) },
+      data: {
+        ...(resolved !== undefined && { resolved: Boolean(resolved) }),
+        ...(adminNote !== undefined && { adminNote: String(adminNote).trim() || null }),
+      },
+      include: { booking: { select: { id: true, code: true } }, route: { select: { id: true, name: true } } },
+    });
+    res.json(feedback);
+  } catch (error) {
+    console.error("PATCH /admin/feedbacks/:id error:", error);
+    res.status(500).json({ message: "Không cập nhật được phản hồi" });
+  }
+});

@@ -13,10 +13,12 @@ import HomePage from './pages/HomePage';
 import BookingPage from './pages/BookingPage';
 import RoutePage from './pages/RoutePage';
 import RouteSeoPage from './pages/RouteSeoPage';
+import FeedbackPage from './pages/FeedbackPage';
 import { LoginPage, RegisterPage, ForgotPasswordPage, ResetPasswordPage } from './pages/AuthPages';
 import { PostsPage } from './pages/PostsPage';
 import { PostDetailPage } from './pages/PostDetailPage';
 import { AdminDashboard, AdminReports, AdminSettings } from './pages/AdminPages';
+import { AdminFeedback } from './pages/AdminFeedback';
 import { AdminContentLayout } from './pages/admin/AdminContentLayout';
 import { AdminPostList } from './pages/admin/AdminPostList';
 import { AdminPostFormPage } from './pages/admin/AdminPostFormPage';
@@ -71,6 +73,7 @@ function App(){return <HelmetProvider><SiteSettingsProvider><AuthProvider><Brows
 <Route path="/dat-lai-mat-khau" element={<PublicLayout><ResetPasswordPage/></PublicLayout>} />
 <Route path="/tra-cuu-don" element={<PublicLayout><TrackBookingPage/></PublicLayout>} />
 <Route path="/lien-he" element={<PublicLayout><ContactPage/></PublicLayout>} />
+<Route path="/gop-y" element={<PublicLayout><FeedbackPage/></PublicLayout>} />
 <Route path="/kinh-nghiem" element={<PublicLayout><PostsPage/></PublicLayout>} />
 <Route path="/kinh-nghiem/:slug" element={<PublicLayout><PostDetailPage/></PublicLayout>} />
 <Route path="/xe-sai-gon-di-duc-linh" element={<PublicLayout><RouteSeoPage slug="xe-sai-gon-di-duc-linh" /></PublicLayout>} />
@@ -79,6 +82,7 @@ function App(){return <HelmetProvider><SiteSettingsProvider><AuthProvider><Brows
 <Route path="/admin" element={<ProtectedRoute roles={["ADMIN","DISPATCHER","ACCOUNTANT"]}><DashboardLayout type="admin"><AdminDashboard/></DashboardLayout></ProtectedRoute>} />
 <Route path="/admin/don-hang" element={<ProtectedRoute roles={["ADMIN","DISPATCHER","ACCOUNTANT"]}><DashboardLayout type="admin"><AdminBookings/></DashboardLayout></ProtectedRoute>} />
 <Route path="/admin/don-hang/:id" element={<ProtectedRoute roles={["ADMIN","DISPATCHER","ACCOUNTANT"]}><DashboardLayout type="admin"><AdminBookingDetail/></DashboardLayout></ProtectedRoute>} />
+<Route path="/admin/gop-y" element={<ProtectedRoute roles={["ADMIN","DISPATCHER","ACCOUNTANT"]}><DashboardLayout type="admin"><AdminFeedback/></DashboardLayout></ProtectedRoute>} />
 <Route path="/admin/dispatch" element={<ProtectedRoute roles={["ADMIN","DISPATCHER","ACCOUNTANT"]}><DashboardLayout type="admin"><AdminDispatch/></DashboardLayout></ProtectedRoute>} />
 <Route path="/admin/dieu-phoi" element={<ProtectedRoute roles={["ADMIN","DISPATCHER","ACCOUNTANT"]}><DashboardLayout type="admin"><AdminTrips/></DashboardLayout></ProtectedRoute>} />
 <Route path="/admin/chuyen-xe" element={<Navigate to="/admin/dieu-phoi" replace />} />

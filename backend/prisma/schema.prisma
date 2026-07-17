@@ -70,6 +70,14 @@ enum NotificationType {
   DRIVER_TRIP_ASSIGNED
 }
 
+enum FeedbackCategory {
+  RATING
+  COMPLAINT_DRIVER
+  SUGGESTION
+  BUG_REPORT
+  OTHER
+}
+
 enum DriverBookingRideStatus {
   WAITING_PICKUP
   PICKING_UP
@@ -225,6 +233,7 @@ model Route {
   priceRules           PriceRule[]
   trips                Trip[]
   drivers              Driver[]
+  feedbacks            Feedback[]
 
   @@map("routes")
 }
@@ -299,6 +308,7 @@ model Booking {
   customer            Customer?     @relation(fields: [customerId], references: [id])
   route               Route?        @relation(fields: [routeId], references: [id])
   tripBookings        TripBooking[]
+  feedbacks           Feedback[]
 
   @@map("bookings")
 }
@@ -441,4 +451,25 @@ model Post {
   category       PostCategory? @relation(fields: [categoryId], references: [id])
 
   @@map("posts")
+}
+
+model Feedback {
+  id           Int                @id @default(autoincrement())
+  category     FeedbackCategory
+  name         String
+  phone        String
+  email        String?
+  bookingId    Int?               @map("booking_id")
+  routeId      Int?               @map("route_id")
+  content      String             @db.Text
+  resolved     Boolean            @default(false)
+  adminNote    String?            @map("admin_note") @db.Text
+  createdAt    DateTime           @default(now()) @map("created_at")
+  updatedAt    DateTime           @updatedAt @map("updated_at")
+  booking      Booking?           @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  route        Route?             @relation(fields: [routeId], references: [id], onDelete: SetNull)
+
+  @@index([phone, createdAt])
+  @@index([category, resolved, createdAt])
+  @@map("feedbacks")
 }

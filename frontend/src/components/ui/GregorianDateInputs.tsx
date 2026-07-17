@@ -17,7 +17,6 @@ import {
   minBookingDepartureParts,
   nowDepartureParts,
   parseLocalDateTimeParts,
-  suggestedBookingDepartureHint,
 } from "../../lib/datetime";
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -312,9 +311,6 @@ function CalendarPopup({
                 {pad(timeParts.hour)}:{pad(timeParts.minute)}
               </span>
             </div>
-            {(minFromNow || suggestPlus1h) && selectedIsToday && (
-              <p className="mt-2 text-xs font-semibold text-brand-800">{suggestedBookingDepartureHint()}</p>
-            )}
             <div className="mt-3 grid grid-cols-2 gap-2">
               <select
                 className="input !rounded-2xl !bg-white"

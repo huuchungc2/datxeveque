@@ -11,7 +11,6 @@ import {
   minBookingDepartureLocal,
   parseLocalDateTimeParts,
   resolveBookingScheduledAt,
-  suggestedBookingDepartureHint,
 } from "../lib/datetime";
 import { normalizeVnPhone, PHONE_INVALID_MESSAGE, phoneInputProps, sanitizePhoneInput } from "../lib/phone";
 import { findServiceByPath, ROUTE_REQUIRED_SERVICE_TYPES } from "../routes/bookableServices";
@@ -751,7 +750,6 @@ export default function BookingPage({ type: initType, title: propTitle, defaultR
                   }}
                 />
                 <FieldError id="scheduledAt-err" message={fieldErrors.scheduledAt} />
-                <p className="mt-1 text-xs text-brand-800">{suggestedBookingDepartureHint()}</p>
               </div>
 
               {usesPassengerCount(form.type) ? (
