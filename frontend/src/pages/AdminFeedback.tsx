@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Eye, Search } from "lucide-react";
-import { api, unwrapList } from "../lib/api";
-import { parsePageQuery } from "../lib/pagination";
+import { api } from "../lib/api";
 
 const categoryLabels: Record<string, string> = {
   RATING: "Đánh giá",
