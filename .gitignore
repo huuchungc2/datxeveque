@@ -20,8 +20,8 @@ restore-db.local.bat
 # logs
 **/*.log
 
-# prisma
-**/prisma/migrations/
+# prisma (commit migrations for auto-deploy)
+# **/prisma/migrations/
 
 # uploads / runtime
 uploads/
