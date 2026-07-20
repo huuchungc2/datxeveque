@@ -155,7 +155,7 @@ export function PostDetailPage() {
                       <img
                         src={thumb.url}
                         alt={thumb.alt}
-                        className="h-32 w-full object-cover transition group-hover:scale-[1.02]"
+                        className="h-36 w-full object-cover transition group-hover:scale-[1.02]"
                         loading="lazy"
                       />
                       <div className="flex flex-1 flex-col p-3">
