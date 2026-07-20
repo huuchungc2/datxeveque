@@ -111,7 +111,7 @@ export function PostDetailPage() {
           <img
             src={cover.url}
             alt={cover.alt}
-            className="max-h-96 w-full object-cover"
+            className="w-full object-contain"
             loading="eager"
           />
 
