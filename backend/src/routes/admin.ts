@@ -51,7 +51,7 @@ function sanitizePostContent(html: string) {
 
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireRoles(["ADMIN", "DISPATCHER", "ACCOUNTANT"]));
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
 function buildBookingListWhere(query: Record<string, unknown>) {
   const where: any = {};
