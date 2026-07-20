@@ -38,20 +38,44 @@ export async function sendTelegramMessage(text: string) {
   const chat = chatId();
   if (!bot || !chat) return;
 
-  const res = await fetch(`https://api.telegram.org/bot${bot}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: chat,
-      text: text.slice(0, 4096),
-      disable_web_page_preview: true,
-    }),
-  });
+  const maxRetries = 2;
+  const timeoutMs = 8000;
+  let lastError: Error | null = null;
 
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`Telegram API ${res.status}: ${errText}`);
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+      const res = await fetch(`https://api.telegram.org/bot${bot}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chat,
+          text: text.slice(0, 4096),
+          disable_web_page_preview: true,
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Telegram API ${res.status}: ${errText}`);
+      }
+
+      return;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      if (attempt < maxRetries) {
+        const backoffMs = (attempt + 1) * 1000;
+        await new Promise((resolve) => setTimeout(resolve, backoffMs));
+      }
+    }
   }
+
+  throw lastError || new Error("Failed to send Telegram message");
 }
 
 /** Mirror 1 thông báo chuông (cùng title/body/link). */
