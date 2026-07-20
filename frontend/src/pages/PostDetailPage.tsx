@@ -111,7 +111,7 @@ export function PostDetailPage() {
           <img
             src={cover.url}
             alt={cover.alt}
-            className="aspect-[16/10] w-full object-contain sm:aspect-[2/1] md:aspect-[21/9]"
+            className="aspect-[16/10] w-full object-cover sm:aspect-[2/1] md:aspect-[21/9]"
             loading="eager"
           />
 
@@ -155,7 +155,7 @@ export function PostDetailPage() {
                       <img
                         src={thumb.url}
                         alt={thumb.alt}
-                        className="h-28 w-full object-contain transition group-hover:scale-[1.02]"
+                        className="h-32 w-full object-cover transition group-hover:scale-[1.02]"
                         loading="lazy"
                       />
                       <div className="flex flex-1 flex-col p-3">
