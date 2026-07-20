@@ -139,6 +139,7 @@ export function AdminPostList() {
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/80 text-xs font-bold uppercase tracking-wide text-slate-500">
+                <th className="px-4 py-3 w-12">Ảnh</th>
                 <th className="px-4 py-3">Tiêu đề</th>
                 <th className="px-4 py-3">Slug</th>
                 <th className="px-4 py-3">Trạng thái</th>
@@ -148,6 +149,13 @@ export function AdminPostList() {
             <tbody className="divide-y divide-slate-100">
               {items.map((p) => (
                 <tr key={p.id} className="hover:bg-brand-50/40">
+                  <td className="px-4 py-3">
+                    {p.thumbnailUrl ? (
+                      <img src={p.thumbnailUrl} alt="" className="h-10 w-10 rounded object-cover" />
+                    ) : (
+                      <div className="h-10 w-10 rounded bg-slate-100" />
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <b className="text-ink-900">{p.title}</b>
                     <p className="mt-0.5 text-xs text-slate-500">{p.category?.name || "—"}</p>
@@ -176,7 +184,7 @@ export function AdminPostList() {
               ))}
               {!loading && !items.length && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-12 text-center text-slate-500">
+                  <td colSpan={5} className="px-4 py-12 text-center text-slate-500">
                     Không có bài phù hợp bộ lọc.
                   </td>
                 </tr>
@@ -189,6 +197,9 @@ export function AdminPostList() {
       <div className="mt-3 grid gap-3 md:hidden">
         {items.map((p) => (
           <div className="card flex flex-col gap-3" key={p.id}>
+            {p.thumbnailUrl && (
+              <img src={p.thumbnailUrl} alt="" className="h-40 w-full rounded object-cover" />
+            )}
             <div>
               <b>{p.title}</b>
               <p className="text-xs text-slate-500">/kinh-nghiem/{p.slug}</p>

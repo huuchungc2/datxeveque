@@ -49,6 +49,11 @@ function sanitizePostContent(html: string) {
   return String(html || "").replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
 }
 
+function extractFirstImageUrl(html: string): string | null {
+  const imgMatch = html.match(/<img[^>]+src=["']([^"']+)["']/i);
+  return imgMatch ? imgMatch[1] : null;
+}
+
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireRoles(["ADMIN", "DISPATCHER", "ACCOUNTANT"]));
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
@@ -1092,8 +1097,12 @@ adminRouter.get("/posts", async (req, res) => {
       take: limit,
     }),
   ]);
+  const items = posts.map((post) => ({
+    ...post,
+    thumbnailUrl: extractFirstImageUrl(post.content),
+  }));
   res.json({
-    items: posts,
+    items,
     page,
     pageSize: limit,
     total,

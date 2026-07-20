@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx prisma *)",
+      "Bash(npx tsc *)",
+      "Bash(git commit -m 'fix: remove unused imports breaking AdminFeedback build *)",
+      "PowerShell(git push origin main)",
+      "Bash(grep -n \"telegram\" d:\\\\\\\\project\\\\\\\\dat-xe-ve-que\\\\\\\\backend\\\\\\\\src\\\\\\\\routes\\\\\\\\admin.ts)",
+      "PowerShell(git commit --message \"feat: add Telegram test button in admin settings\")",
+      "Bash(git commit -m ' *)",
+      "Bash(npm run *)"
+    ]
+  }
+}

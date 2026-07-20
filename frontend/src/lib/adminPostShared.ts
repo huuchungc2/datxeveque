@@ -13,6 +13,7 @@ export type PostRow = PostForm & {
   id: number;
   categoryId?: number | null;
   category?: { id: number; name: string } | null;
+  thumbnailUrl?: string | null;
 };
 
 export const emptyPostForm = (): PostForm => ({
