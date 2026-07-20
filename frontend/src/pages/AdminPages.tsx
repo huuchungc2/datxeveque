@@ -220,6 +220,8 @@ export function AdminReports() {
 export function AdminSettings() {
   const { reload: reloadSiteSettings } = useSiteSettings();
   const [rows, setRows] = useState<any[]>([]);
+  const [telegramLoading, setTelegramLoading] = useState(false);
+  const [telegramMessage, setTelegramMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   useEffect(() => {
     api.get("/admin/settings").then((r) => setRows(r.data));
   }, []);
@@ -228,6 +230,18 @@ export function AdminSettings() {
     await api.put("/admin/settings", body);
     reloadSiteSettings();
     alert("Đã lưu — trang web sẽ hiển thị số/Zalo mới (footer, liên hệ, đặt xe).");
+  };
+  const testTelegram = async () => {
+    setTelegramLoading(true);
+    setTelegramMessage(null);
+    try {
+      const res = await api.post("/admin/telegram/test", {});
+      setTelegramMessage({ type: "success", text: res.data?.message || "Đã gửi tin test" });
+    } catch (e: any) {
+      setTelegramMessage({ type: "error", text: e?.response?.data?.message || e?.message || "Không gửi được tin test" });
+    } finally {
+      setTelegramLoading(false);
+    }
   };
   return (
     <div>
@@ -241,6 +255,18 @@ export function AdminSettings() {
           </label>
         ))}
         <button className="btn-primary md:col-span-2" onClick={save}>Lưu cấu hình</button>
+      </div>
+      <div className="card mt-5">
+        <h2 className="text-lg font-extrabold text-ink-900">Telegram thông báo</h2>
+        <p className="mt-2 text-sm text-slate-600">Kiểm tra kết nối tới Telegram bot (xem TELEGRAM_SETUP.md).</p>
+        <button className="btn-secondary mt-4" disabled={telegramLoading} onClick={testTelegram}>
+          {telegramLoading ? "Đang kiểm tra…" : "🔔 Test Telegram"}
+        </button>
+        {telegramMessage && (
+          <p className={`mt-3 text-sm font-semibold ${telegramMessage.type === "success" ? "text-green-700" : "text-red-700"}`}>
+            {telegramMessage.text}
+          </p>
+        )}
       </div>
     </div>
   );
