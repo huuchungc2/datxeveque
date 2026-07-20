@@ -4,6 +4,8 @@
  * Cấu hình: TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID — xem TELEGRAM_SETUP.md
  */
 
+import https from "node:https";
+
 const token = () => process.env.TELEGRAM_BOT_TOKEN?.trim() || "";
 const chatId = () => process.env.TELEGRAM_CHAT_ID?.trim() || "";
 
@@ -13,6 +15,42 @@ export function telegramNotifyEnabled() {
 
 function siteBaseUrl() {
   return (process.env.PUBLIC_SITE_URL || process.env.FRONTEND_URL || "").replace(/\/$/, "");
+}
+
+/** HTTPS POST with IPv4 forced (family: 4 bypasses undici resolver limitations). */
+function httpsPostJson(url: string, body: any, timeoutMs = 8000): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const u = new URL(url);
+    const data = JSON.stringify(body);
+    const req = https.request(
+      {
+        hostname: u.hostname,
+        path: u.pathname + u.search,
+        method: "POST",
+        family: 4,
+        timeout: timeoutMs,
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(data),
+        },
+      },
+      (res) => {
+        let chunks = "";
+        res.on("data", (c) => (chunks += c));
+        res.on("end", () => {
+          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+            resolve(chunks);
+          } else {
+            reject(new Error(`Telegram API ${res.statusCode}: ${chunks}`));
+          }
+        });
+      }
+    );
+    req.on("timeout", () => req.destroy(new Error("Request timeout")));
+    req.on("error", reject);
+    req.write(data);
+    req.end();
+  });
 }
 
 /** Link trong DB notification: /don-hang, /dispatch, /tai-xe → URL đầy đủ. */
@@ -44,27 +82,11 @@ export async function sendTelegramMessage(text: string) {
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-      const res = await fetch(`https://api.telegram.org/bot${bot}/sendMessage`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: chat,
-          text: text.slice(0, 4096),
-          disable_web_page_preview: true,
-        }),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`Telegram API ${res.status}: ${errText}`);
-      }
-
+      await httpsPostJson(`https://api.telegram.org/bot${bot}/sendMessage`, {
+        chat_id: chat,
+        text: text.slice(0, 4096),
+        disable_web_page_preview: true,
+      }, timeoutMs);
       return;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
