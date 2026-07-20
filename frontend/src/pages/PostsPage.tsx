@@ -56,7 +56,7 @@ export function PostsPage() {
                   <img
                     src={cover.url}
                     alt={cover.alt}
-                    className="h-80 w-full object-cover transition group-hover:scale-[1.02]"
+                    className="h-[340px] w-full object-cover transition group-hover:scale-[1.02]"
                     loading="lazy"
                   />
                 </Link>
