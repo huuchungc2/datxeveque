@@ -1211,7 +1211,7 @@ adminRouter.post("/media/upload", upload.single("file"), async (req, res) => {
   await fs.mkdir(dir, { recursive: true });
   const fileName = `${slug}-${Date.now()}.webp`;
   const filePath = path.join(dir, fileName);
-  await sharp(req.file.buffer).resize({ width: 1600, withoutEnlargement: true, fit: 'inside' }).webp({ quality: 80 }).toFile(filePath);
+  await sharp(req.file.buffer).resize(1600, 1200, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 80 }).toFile(filePath);
   const fileUrl = `/uploads/${usageType}/${fileName}`;
   const media = await prisma.mediaFile.create({ data: { originalName: req.file.originalname, fileName, fileUrl, mimeType: "image/webp", sizeBytes: req.file.size, altText, title, usageType } });
   res.json(media);
