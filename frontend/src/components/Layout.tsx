@@ -6,7 +6,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
-import { ChevronDown, LogOut, Menu, MessageCircle, Phone, UserCircle, UserPlus, X } from "lucide-react";
+import { ChevronDown, LogOut, Menu, MessageCircle, MessageSquare, Phone, UserCircle, UserPlus, X } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 import { GroupFlowDownloadButton } from "./GroupFlowDownloadButton";
 import { useAuth } from "../lib/auth";
@@ -241,6 +241,16 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
                 <span className="hidden text-sm font-semibold md:inline">{contact.hotline}</span>
               </a>
             )}
+            <Link
+              to="/gop-y"
+              className="flex items-center gap-1.5 rounded-2xl border border-slate-200 bg-slate-50 px-2.5 py-2 text-slate-700 hover:bg-slate-100 md:px-3.5 md:text-sm md:font-semibold"
+              aria-label="Góp ý & phàn nàn"
+              onClick={() => trackEvent("click_feedback", { source: "header" })}
+              title="Góp ý & phàn nàn"
+            >
+              <MessageSquare size={18} className="shrink-0" />
+              <span className="hidden text-sm font-semibold md:inline">Góp ý</span>
+            </Link>
             {user ? (
               <AccountUserMenu variant="public" />
             ) : (
